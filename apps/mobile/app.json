@@ -1,0 +1,36 @@
+{
+  "expo": {
+    "name": "CrowdOS",
+    "slug": "crowdos",
+    "scheme": "crowdos",
+    "version": "0.1.0",
+    "orientation": "portrait",
+    "userInterfaceStyle": "light",
+    "ios": {
+      "bundleIdentifier": "com.crowdos.mobile",
+      "supportsTablet": false,
+      "infoPlist": {
+        "NSLocalNetworkUsageDescription": "CrowdOS uses the local network to discover nearby trusted devices during emergencies.",
+        "NSBluetoothAlwaysUsageDescription": "CrowdOS uses Bluetooth to exchange emergency alerts with nearby trusted devices when internet is unavailable.",
+        "NSBonjourServices": ["_crowdos._tcp", "_crowdos._udp"]
+      }
+    },
+    "android": {
+      "package": "com.crowdos.mobile",
+      "permissions": [
+        "BLUETOOTH",
+        "BLUETOOTH_ADMIN",
+        "BLUETOOTH_SCAN",
+        "BLUETOOTH_CONNECT",
+        "ACCESS_WIFI_STATE",
+        "CHANGE_WIFI_STATE",
+        "ACCESS_FINE_LOCATION"
+      ]
+    },
+    "extra": {
+      "eas": {
+        "projectId": "local"
+      }
+    }
+  }
+}

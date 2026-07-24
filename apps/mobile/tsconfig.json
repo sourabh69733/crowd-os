@@ -1,0 +1,9 @@
+{
+  "extends": "expo/tsconfig.base",
+  "compilerOptions": {
+    "strict": true,
+    "paths": {
+      "@crowdos/core": ["../../packages/core/src/index.ts"]
+    }
+  }
+}
