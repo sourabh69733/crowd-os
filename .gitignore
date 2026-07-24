@@ -17,7 +17,7 @@ node_modules
 /.next/
 .vinext/
 /out/
-.expo
+**/.expo/
 
 # misc
 .DS_Store
