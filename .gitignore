@@ -15,7 +15,7 @@ node_modules
 
 # next.js
 /.next/
-/.vinext/
+.vinext/
 /out/
 .expo
 
