@@ -41,3 +41,7 @@ dist/
 /.wrangler/
 /outputs/
 /work/
+
+# local dev
+.idea/
+*.iml
