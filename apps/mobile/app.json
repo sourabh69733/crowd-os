@@ -6,6 +6,20 @@
     "version": "0.1.0",
     "orientation": "portrait",
     "userInterfaceStyle": "light",
+    "plugins": [
+      [
+        "expo-sqlite",
+        {
+          "useSQLCipher": true
+        }
+      ],
+      [
+        "expo-secure-store",
+        {
+          "configureAndroidBackup": false
+        }
+      ]
+    ],
     "ios": {
       "bundleIdentifier": "com.crowdos.mobile",
       "supportsTablet": false,
@@ -17,11 +31,18 @@
     },
     "android": {
       "package": "com.crowdos.mobile",
+      "allowBackup": false,
+      "blockedPermissions": [
+        "android.permission.READ_EXTERNAL_STORAGE",
+        "android.permission.WRITE_EXTERNAL_STORAGE"
+      ],
       "permissions": [
         "BLUETOOTH",
         "BLUETOOTH_ADMIN",
+        "BLUETOOTH_ADVERTISE",
         "BLUETOOTH_SCAN",
         "BLUETOOTH_CONNECT",
+        "NEARBY_WIFI_DEVICES",
         "ACCESS_WIFI_STATE",
         "CHANGE_WIFI_STATE",
         "ACCESS_FINE_LOCATION"
