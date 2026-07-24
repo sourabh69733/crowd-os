@@ -1,0 +1,118 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1800" height="1180" viewBox="0 0 1800 1180">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font: 700 42px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 22px Arial, sans-serif; fill: #59657a; }
+      .lane { fill: #ffffff; stroke: #d8deea; stroke-width: 2; }
+      .lane-title { font: 700 23px Arial, sans-serif; fill: #172033; }
+      .box { fill: #ffffff; stroke: #8e9bb0; stroke-width: 2; }
+      .mobile { fill: #e8f2ff; stroke: #3478c7; }
+      .mesh { fill: #eef8ed; stroke: #4f8d57; }
+      .cloud { fill: #fff3de; stroke: #b77a19; }
+      .secure { fill: #f3eefe; stroke: #7654b5; }
+      .ops { fill: #ffeceb; stroke: #b85450; }
+      .label { font: 700 21px Arial, sans-serif; fill: #172033; text-anchor: middle; }
+      .small { font: 400 17px Arial, sans-serif; fill: #445067; text-anchor: middle; }
+      .note { font: 400 18px Arial, sans-serif; fill: #445067; }
+      .arrow { fill: none; stroke: #546176; stroke-width: 4; marker-end: url(#arrow); }
+      .dashed { stroke-dasharray: 10 8; }
+      .boundary { fill: none; stroke: #b85450; stroke-width: 3; stroke-dasharray: 12 8; }
+      .boundary-label { font: 700 17px Arial, sans-serif; fill: #9c3f3b; }
+    </style>
+    <marker id="arrow" markerWidth="12" markerHeight="12" refX="10" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#546176"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1800" height="1180"/>
+  <text class="title" x="90" y="75">CrowdOS Production Architecture</text>
+  <text class="subtitle" x="90" y="112">Offline-first safety coordination with secure store-and-forward delivery</text>
+
+  <rect class="lane" x="70" y="155" width="1660" height="245" rx="8"/>
+  <text class="lane-title" x="100" y="195">Field devices</text>
+
+  <rect class="box mobile" x="115" y="235" width="285" height="115" rx="8"/>
+  <text class="label" x="257" y="277">Attendee App</text>
+  <text class="small" x="257" y="310">alerts, SOS, maps, reports</text>
+
+  <rect class="box mobile" x="520" y="235" width="285" height="115" rx="8"/>
+  <text class="label" x="662" y="277">Volunteer App</text>
+  <text class="small" x="662" y="310">tasks, response, verification</text>
+
+  <rect class="box secure" x="925" y="220" width="330" height="145" rx="8"/>
+  <text class="label" x="1090" y="260">Secure Local Core</text>
+  <text class="small" x="1090" y="293">encrypted database + queue</text>
+  <text class="small" x="1090" y="321">signatures, expiry, deduplication</text>
+
+  <rect class="box mesh" x="1375" y="220" width="300" height="145" rx="8"/>
+  <text class="label" x="1525" y="260">Transport Adapter</text>
+  <text class="small" x="1525" y="293">Bluetooth / local Wi-Fi</text>
+  <text class="small" x="1525" y="321">internet sync when available</text>
+
+  <path class="arrow" d="M400 275 V205 H1090 V210"/>
+  <path class="arrow" d="M805 292 H915"/>
+  <path class="arrow" d="M1255 292 H1365"/>
+
+  <rect class="lane" x="70" y="430" width="1660" height="215" rx="8"/>
+  <text class="lane-title" x="100" y="470">Nearby network</text>
+
+  <rect class="box mesh" x="175" y="505" width="340" height="95" rx="8"/>
+  <text class="label" x="345" y="543">Android Nearby</text>
+  <text class="small" x="345" y="572">native transport module</text>
+
+  <rect class="box mesh" x="650" y="505" width="340" height="95" rx="8"/>
+  <text class="label" x="820" y="543">iOS Multipeer</text>
+  <text class="small" x="820" y="572">native transport module</text>
+
+  <rect class="box cloud" x="1125" y="495" width="500" height="115" rx="8"/>
+  <text class="label" x="1375" y="536">Gateway Device or Relay Node</text>
+  <text class="small" x="1375" y="568">bridges local messages only when internet exists</text>
+
+  <path class="arrow" d="M1480 365 V450 H345 V495"/>
+  <path class="arrow" d="M1540 365 V440 H820 V495"/>
+  <path class="arrow dashed" d="M990 552 H1115"/>
+
+  <rect class="lane" x="70" y="675" width="1660" height="330" rx="8"/>
+  <text class="lane-title" x="100" y="715">Cloud control plane</text>
+
+  <rect class="boundary" x="105" y="745" width="1590" height="220" rx="8"/>
+  <text class="boundary-label" x="125" y="775">ZERO-TRUST SECURITY BOUNDARY</text>
+
+  <rect class="box cloud" x="145" y="810" width="275" height="105" rx="8"/>
+  <text class="label" x="282" y="850">API Gateway</text>
+  <text class="small" x="282" y="881">auth, limits, validation</text>
+
+  <rect class="box cloud" x="505" y="810" width="275" height="105" rx="8"/>
+  <text class="label" x="642" y="850">Event Service</text>
+  <text class="small" x="642" y="881">alerts, incidents, tasks</text>
+
+  <rect class="box secure" x="865" y="810" width="275" height="105" rx="8"/>
+  <text class="label" x="1002" y="850">Data Layer</text>
+  <text class="small" x="1002" y="881">Postgres, cache, object store</text>
+
+  <rect class="box secure" x="1225" y="810" width="275" height="105" rx="8"/>
+  <text class="label" x="1362" y="850">Identity &amp; Keys</text>
+  <text class="small" x="1362" y="881">roles, device trust, KMS</text>
+
+  <path class="arrow" d="M420 862 H495"/>
+  <path class="arrow" d="M780 862 H855"/>
+  <path class="arrow" d="M1140 862 H1215"/>
+
+  <rect class="box ops" x="150" y="1040" width="400" height="100" rx="8"/>
+  <text class="label" x="350" y="1080">Organizer Dashboard</text>
+  <text class="small" x="350" y="1111">triage, broadcasts, zones, audit</text>
+
+  <rect class="box ops" x="700" y="1040" width="400" height="100" rx="8"/>
+  <text class="label" x="900" y="1080">Operations &amp; Monitoring</text>
+  <text class="small" x="900" y="1111">metrics, alerts, backups, response</text>
+
+  <rect class="box secure" x="1250" y="1040" width="400" height="100" rx="8"/>
+  <text class="label" x="1450" y="1080">Immutable Audit Trail</text>
+  <text class="small" x="1450" y="1111">who did what, when, and why</text>
+
+  <path class="arrow" d="M1375 610 V730 H282 V800"/>
+  <path class="arrow" d="M350 1040 V925"/>
+  <path class="arrow" d="M900 1040 V925"/>
+  <path class="arrow" d="M1450 1040 V925"/>
+</svg>
