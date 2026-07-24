@@ -1,5 +1,7 @@
-import { useMemo, useState } from "react";
+import { useEffect, useMemo, useState } from "react";
 import {
+  ActivityIndicator,
+  Alert,
   Pressable,
   SafeAreaView,
   ScrollView,
@@ -9,8 +11,13 @@ import {
   TextInput,
   View,
 } from "react-native";
+import * as Crypto from "expo-crypto";
 
 import type { CrowdMessage, MessageKind } from "@crowdos/core";
+import {
+  enqueuePendingMessage,
+  listPendingMessages,
+} from "./storage/database";
 
 const eventPlan = [
   "Meetup: Blue Flag checkpoint",
@@ -37,15 +44,43 @@ export default function App() {
   const [offlineMode, setOfflineMode] = useState(true);
   const [queuedMessages, setQueuedMessages] = useState<CrowdMessage[]>([]);
   const [note, setNote] = useState("Need doctor near Gate 3");
+  const [storageReady, setStorageReady] = useState(false);
+
+  useEffect(() => {
+    let active = true;
+
+    listPendingMessages()
+      .then((messages) => {
+        if (active) {
+          setQueuedMessages(messages);
+          setStorageReady(true);
+        }
+      })
+      .catch(() => {
+        if (active) {
+          Alert.alert(
+            "Secure storage unavailable",
+            "CrowdOS could not open its encrypted offline queue."
+          );
+        }
+      });
+
+    return () => {
+      active = false;
+    };
+  }, []);
 
   const networkLabel = useMemo(
     () => (offlineMode ? "Offline local relay" : "Online gateway sync"),
     [offlineMode]
   );
 
-  function queueMessage(kind: MessageKind, priority: CrowdMessage["priority"]) {
+  async function queueMessage(
+    kind: MessageKind,
+    priority: CrowdMessage["priority"]
+  ) {
     const message: CrowdMessage = {
-      id: `local-${Date.now()}`,
+      id: Crypto.randomUUID(),
       eventId: "pilot-event",
       kind,
       priority,
@@ -55,7 +90,15 @@ export default function App() {
       body: { note },
     };
 
-    setQueuedMessages((items) => [message, ...items]);
+    try {
+      await enqueuePendingMessage(message);
+      setQueuedMessages(await listPendingMessages());
+    } catch {
+      Alert.alert(
+        "Message not queued",
+        "The encrypted queue could not save this request. Please try again."
+      );
+    }
   }
 
   return (
@@ -74,11 +117,33 @@ export default function App() {
 
         <View style={styles.panel}>
           <Text style={styles.panelTitle}>One-tap SOS</Text>
+          {!storageReady && (
+            <View style={styles.loading}>
+              <ActivityIndicator />
+              <Text style={styles.meta}>Opening encrypted offline queue</Text>
+            </View>
+          )}
           <View style={styles.grid}>
-            <Action label="Doctor" onPress={() => queueMessage("sos", "critical")} />
-            <Action label="Water" onPress={() => queueMessage("sos", "high")} />
-            <Action label="Legal" onPress={() => queueMessage("sos", "high")} />
-            <Action label="Evacuate" onPress={() => queueMessage("sos", "critical")} />
+            <Action
+              disabled={!storageReady}
+              label="Doctor"
+              onPress={() => void queueMessage("sos", "critical")}
+            />
+            <Action
+              disabled={!storageReady}
+              label="Water"
+              onPress={() => void queueMessage("sos", "high")}
+            />
+            <Action
+              disabled={!storageReady}
+              label="Legal"
+              onPress={() => void queueMessage("sos", "high")}
+            />
+            <Action
+              disabled={!storageReady}
+              label="Evacuate"
+              onPress={() => void queueMessage("sos", "critical")}
+            />
           </View>
           <TextInput
             style={styles.input}
@@ -126,9 +191,25 @@ export default function App() {
   );
 }
 
-function Action({ label, onPress }: { label: string; onPress: () => void }) {
+function Action({
+  disabled,
+  label,
+  onPress,
+}: {
+  disabled: boolean;
+  label: string;
+  onPress: () => void;
+}) {
   return (
-    <Pressable style={styles.action} onPress={onPress}>
+    <Pressable
+      disabled={disabled}
+      style={({ pressed }) => [
+        styles.action,
+        disabled && styles.actionDisabled,
+        pressed && !disabled && styles.actionPressed,
+      ]}
+      onPress={onPress}
+    >
       <Text style={styles.actionText}>{label}</Text>
     </Pressable>
   );
@@ -204,6 +285,12 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: "900",
   },
+  actionDisabled: {
+    opacity: 0.45,
+  },
+  actionPressed: {
+    opacity: 0.8,
+  },
   input: {
     borderColor: "#d8ded6",
     borderRadius: 8,
@@ -244,5 +331,10 @@ const styles = StyleSheet.create({
     borderWidth: 1,
     gap: 4,
     padding: 10,
+  },
+  loading: {
+    alignItems: "center",
+    flexDirection: "row",
+    gap: 8,
   },
 });
