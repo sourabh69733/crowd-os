@@ -1,0 +1,133 @@
+<svg xmlns="http://www.w3.org/2000/svg" width="1900" height="1120" viewBox="0 0 1900 1120">
+  <defs>
+    <style>
+      .bg { fill: #f7f9fc; }
+      .title { font: 700 44px Arial, sans-serif; fill: #172033; }
+      .subtitle { font: 400 22px Arial, sans-serif; fill: #59657a; }
+      .zone { fill: #ffffff; stroke: #d6ddea; stroke-width: 2; }
+      .zone-title { font: 700 22px Arial, sans-serif; fill: #172033; }
+      .phone { fill: #e9f3ff; stroke: #3478c7; stroke-width: 3; }
+      .gateway { fill: #eaf7eb; stroke: #4d8b55; stroke-width: 4; }
+      .cloud { fill: #fff3de; stroke: #b77a19; stroke-width: 3; }
+      .dashboard { fill: #f2edfc; stroke: #7654b5; stroke-width: 3; }
+      .screen { fill: #fff; stroke: #9aa7ba; stroke-width: 2; }
+      .label { font: 700 20px Arial, sans-serif; fill: #172033; text-anchor: middle; }
+      .small { font: 400 17px Arial, sans-serif; fill: #4b586e; text-anchor: middle; }
+      .status-off { font: 700 16px Arial, sans-serif; fill: #a5453f; text-anchor: middle; }
+      .status-on { font: 700 16px Arial, sans-serif; fill: #35723e; text-anchor: middle; }
+      .arrow-local { fill: none; stroke: #3478c7; stroke-width: 6; marker-end: url(#blue-arrow); }
+      .arrow-local-back { fill: none; stroke: #3478c7; stroke-width: 4; stroke-dasharray: 10 8; marker-end: url(#blue-arrow); }
+      .arrow-net { fill: none; stroke: #4d8b55; stroke-width: 7; marker-end: url(#green-arrow); }
+      .arrow-net-back { fill: none; stroke: #4d8b55; stroke-width: 4; stroke-dasharray: 10 8; marker-end: url(#green-arrow); }
+      .step-circle { fill: #172033; }
+      .step { font: 700 17px Arial, sans-serif; fill: #fff; text-anchor: middle; }
+      .step-label { font: 700 18px Arial, sans-serif; fill: #273248; text-anchor: middle; }
+      .note { fill: #fff8e8; stroke: #b77a19; stroke-width: 2; }
+      .note-title { font: 700 21px Arial, sans-serif; fill: #8a5a10; }
+      .note-text { font: 400 18px Arial, sans-serif; fill: #55462f; }
+      .signal { fill: none; stroke: #4d8b55; stroke-width: 4; stroke-linecap: round; }
+      .cross { stroke: #a5453f; stroke-width: 5; stroke-linecap: round; }
+    </style>
+    <marker id="blue-arrow" markerWidth="12" markerHeight="12" refX="10" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#3478c7"/>
+    </marker>
+    <marker id="green-arrow" markerWidth="12" markerHeight="12" refX="10" refY="5" orient="auto">
+      <path d="M0,0 L10,5 L0,10 z" fill="#4d8b55"/>
+    </marker>
+  </defs>
+
+  <rect class="bg" width="1900" height="1120"/>
+  <text class="title" x="80" y="72">One Gateway Phone Connects an Offline CrowdOS Network</text>
+  <text class="subtitle" x="80" y="110">Nearby phones relay CrowdOS messages until one internet-connected device reaches the backend</text>
+
+  <rect class="zone" x="60" y="155" width="1260" height="680" rx="10"/>
+  <text class="zone-title" x="95" y="198">LOCAL CROWD NETWORK · Bluetooth / local Wi-Fi</text>
+
+  <rect class="zone" x="1360" y="155" width="480" height="680" rx="10"/>
+  <text class="zone-title" x="1395" y="198">INTERNET SERVICES</text>
+
+  <!-- Offline phone A -->
+  <rect class="phone" x="100" y="360" width="210" height="360" rx="28"/>
+  <rect class="screen" x="120" y="405" width="170" height="245" rx="8"/>
+  <rect x="165" y="382" width="80" height="10" rx="5" fill="#3478c7"/>
+  <text class="label" x="205" y="450">Phone A</text>
+  <text class="small" x="205" y="485">Creates medical SOS</text>
+  <rect x="145" y="535" width="120" height="62" rx="6" fill="#3478c7"/>
+  <text x="205" y="573" font-family="Arial" font-size="17" font-weight="700" fill="#fff" text-anchor="middle">SOS queued</text>
+  <text class="status-off" x="205" y="690">NO INTERNET</text>
+  <line class="cross" x1="178" y1="670" x2="232" y2="670"/>
+  <line class="cross" x1="192" y1="654" x2="218" y2="680"/>
+
+  <!-- Offline phone B -->
+  <rect class="phone" x="390" y="300" width="210" height="360" rx="28"/>
+  <rect class="screen" x="410" y="345" width="170" height="245" rx="8"/>
+  <rect x="455" y="322" width="80" height="10" rx="5" fill="#3478c7"/>
+  <text class="label" x="495" y="390">Phone B</text>
+  <text class="small" x="495" y="425">Receives encrypted</text>
+  <text class="small" x="495" y="449">message and relays it</text>
+  <text class="status-off" x="495" y="630">NO INTERNET</text>
+  <line class="cross" x1="468" y1="610" x2="522" y2="610"/>
+  <line class="cross" x1="482" y1="594" x2="508" y2="620"/>
+
+  <!-- Offline phone C -->
+  <rect class="phone" x="680" y="360" width="210" height="360" rx="28"/>
+  <rect class="screen" x="700" y="405" width="170" height="245" rx="8"/>
+  <rect x="745" y="382" width="80" height="10" rx="5" fill="#3478c7"/>
+  <text class="label" x="785" y="450">Phone C</text>
+  <text class="small" x="785" y="485">Relays toward the</text>
+  <text class="small" x="785" y="509">nearest gateway</text>
+  <text class="status-off" x="785" y="690">NO INTERNET</text>
+  <line class="cross" x1="758" y1="670" x2="812" y2="670"/>
+  <line class="cross" x1="772" y1="654" x2="798" y2="680"/>
+
+  <!-- Gateway phone -->
+  <rect class="gateway" x="1000" y="280" width="250" height="420" rx="30"/>
+  <rect class="screen" x="1023" y="330" width="204" height="285" rx="8"/>
+  <rect x="1080" y="302" width="90" height="11" rx="5" fill="#4d8b55"/>
+  <text class="label" x="1125" y="378">Gateway Phone</text>
+  <text class="small" x="1125" y="418">Receives CrowdOS</text>
+  <text class="small" x="1125" y="442">messages from peers</text>
+  <text class="small" x="1125" y="490">Uploads to backend</text>
+  <text class="small" x="1125" y="514">using mobile data</text>
+  <path class="signal" d="M1082 570 q43 -44 86 0 M1096 580 q29 -29 58 0 M1112 590 q13 -13 26 0"/>
+  <text class="status-on" x="1125" y="665">INTERNET AVAILABLE</text>
+
+  <!-- Local relay arrows -->
+  <path class="arrow-local" d="M310 500 C340 480 355 455 380 450"/>
+  <path class="arrow-local" d="M600 450 C635 460 650 495 670 510"/>
+  <path class="arrow-local" d="M890 510 C930 485 955 455 990 440"/>
+  <path class="arrow-local-back" d="M990 555 C950 590 925 610 895 615"/>
+  <path class="arrow-local-back" d="M675 615 C645 605 625 580 605 565"/>
+  <path class="arrow-local-back" d="M385 565 C350 585 330 600 315 610"/>
+
+  <!-- Internet cloud -->
+  <path class="cloud" d="M1435 365 C1435 310 1480 275 1530 295 C1560 245 1640 250 1660 310 C1720 300 1760 340 1750 395 C1790 430 1760 495 1700 495 H1490 C1420 495 1395 415 1435 365 Z"/>
+  <text class="label" x="1595" y="382">CrowdOS Backend</text>
+  <text class="small" x="1595" y="417">alerts, SOS, incidents</text>
+  <text class="small" x="1595" y="445">delivery receipts</text>
+
+  <rect class="dashboard" x="1440" y="585" width="320" height="150" rx="9"/>
+  <text class="label" x="1600" y="630">Organizer Dashboard</text>
+  <text class="small" x="1600" y="665">receives SOS and sends</text>
+  <text class="small" x="1600" y="691">verified response</text>
+
+  <path class="arrow-net" d="M1250 420 H1415"/>
+  <path class="arrow-net-back" d="M1415 470 H1260"/>
+  <path class="arrow-net" d="M1595 500 V575"/>
+
+  <!-- Steps -->
+  <circle class="step-circle" cx="205" cy="780" r="23"/><text class="step" x="205" y="786">1</text>
+  <text class="step-label" x="205" y="817">SOS created</text>
+  <circle class="step-circle" cx="640" cy="780" r="23"/><text class="step" x="640" y="786">2</text>
+  <text class="step-label" x="640" y="817">Relayed phone-to-phone</text>
+  <circle class="step-circle" cx="1125" cy="780" r="23"/><text class="step" x="1125" y="786">3</text>
+  <text class="step-label" x="1125" y="817">Gateway syncs online</text>
+  <circle class="step-circle" cx="1600" cy="780" r="23"/><text class="step" x="1600" y="786">4</text>
+  <text class="step-label" x="1600" y="817">Response returns</text>
+
+  <!-- Limitation -->
+  <rect class="note" x="120" y="890" width="1660" height="160" rx="9"/>
+  <text class="note-title" x="165" y="940">What offline phones can access</text>
+  <text class="note-text" x="165" y="980">They can send and receive CrowdOS alerts, SOS, reports, tasks, maps and delivery receipts through the gateway.</text>
+  <text class="note-text" x="165" y="1018">They do not gain general internet access: WhatsApp, websites, YouTube and other apps remain offline unless the gateway shares a hotspot.</text>
+</svg>
