@@ -1,11 +1,11 @@
 # Freegram project structure
 
-Status: Phase 0 structure, 25 September 2026. No new Android application has been built yet.
+Status: updated 25 September 2026. A first Android application and protocol tests now build; the planned boundaries below still guide later work.
 
 ```text
 apps/
-  android/                 new native Android app; Phase 1 starts its Gradle build
-    README.md              module boundaries and build transition
+  android/                 new native Android app and Gradle build
+    README.md              build command and prototype limitations
   mobile/                  existing Expo/CrowdOS code; retained for reference
 protocol/
   README.md                portable event and exchange boundaries

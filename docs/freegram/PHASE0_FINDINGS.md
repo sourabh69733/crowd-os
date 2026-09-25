@@ -1,12 +1,14 @@
 # Phase 0 dependency and device findings
 
-Checked 25 September 2026. This is a shortlist, not a dependency approval or a claim that Freegram has been built.
+Checked 25 September 2026. This records both the initial shortlist and the subsequent Android prototype validation. It is not a field-readiness claim.
 
 ## Signing and Nostr library
 
 - [Nostr Development Kit for Kotlin](https://github.com/nostr-dev-kit/kotlin) advertises Android support, NIP-01 events, signing, relay subscriptions, a Room cache adapter and an MIT license. Its repository is relatively small/new; its own “production-quality” description is a maintainer claim, not a Freegram validation. Phase 1 should build a minimal app against a pinned release, run our ID fixtures and official BIP-340 vectors, inspect key storage, and test relay errors before adopting it.
 - [Amethyst's Quartz code](https://github.com/vitorpamplona/amethyst) is an actively used Kotlin Nostr implementation with a signer abstraction. It is a useful reference and fallback candidate, but importing a large app codebase may add more complexity than Freegram needs. Its repository states an MIT license; verify the exact module and transitive dependency licenses before reuse.
-- No cryptographic library is selected yet. Do not write our own secp256k1/Schnorr implementation merely to avoid dependency review.
+- The initial shortlist did not select a cryptographic library. We will not write custom secp256k1/Schnorr code merely to avoid dependency review.
+
+Update: The NDK Kotlin `1.0.0` artifact in its README returned 404 on Maven Central. Quartz `1.16.0` was published, but the attempted Android build required compile SDK 37 and AGP 9.1; the installed SDK is 36. We selected [ACINQ secp256k1-kmp 0.24.0](https://github.com/ACINQ/secp256k1-kmp) for BIP-340 and implemented only the small NIP-01 encoding layer. The Android tests pass official 32-byte-message vectors 0–14 and both portable event-ID fixtures. This validates an initial compatibility path, not full library security or device behavior. Details: [Phase 1 status](PHASE1_STATUS.md).
 
 ## Android key storage
 

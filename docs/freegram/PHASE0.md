@@ -1,6 +1,6 @@
 # Freegram Phase 0: first-release contract
 
-Status: design draft, 25 September 2026. Static protocol and repo structure are drafted; relay compatibility, key storage and radio behavior still require validation. This is **not** a deployable system.
+Status: design contract, updated 25 September 2026. A buildable Android prototype and protocol tests now exist; relay interoperability, device key behavior and radio delivery still require validation. This is **not** a deployable system. See [Phase 1 status](PHASE1_STATUS.md).
 
 ## Purpose and scope
 
@@ -29,7 +29,7 @@ Use the NIP-01 fields `id`, `pubkey`, `created_at`, `kind`, `tags`, `content` an
 
 Transport metadata, such as local peer connection, acknowledgement and forwarding count, stays outside the signed event. It may change at each hop. A hop or age limit controls our client but cannot stop a malicious peer from republishing a copied public event. Do not treat these limits as security guarantees. A phone with a clock more than ten minutes ahead of the receiver is quarantined for review/retry rather than silently shown as fresh; clock skew and relay rejection need device tests.
 
-The portable serialization fixtures are in [`protocol/vectors/nip01-id-v1.json`](../../protocol/vectors/nip01-id-v1.json). They check NIP-01 ID derivation only. Phase 1 must add signed-event fixtures and run the official [BIP-340 vectors](https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv) using the selected library. We will not implement custom cryptography.
+The portable serialization fixtures are in [`protocol/vectors/nip01-id-v1.json`](../../protocol/vectors/nip01-id-v1.json). They check NIP-01 ID derivation only. The Android prototype now checks official [BIP-340 vectors 0–14](https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv) (32-byte messages relevant to Nostr IDs) and signing/verification tampering cases with ACINQ secp256k1-kmp. Signed portable event fixtures still need coverage. We will not implement custom cryptography.
 
 ## State and exchange contract
 
@@ -65,4 +65,4 @@ Each test run records Android version, device model, app version, relay URL/oper
 - Decide who runs moderation and source-key verification for the pilot. A valid signature alone must never display an “official organizer” badge.
 - Agree on the intended pilot setting and measurable delivery, latency and battery thresholds. These depend on phone density and movement; no city-wide coverage claim is supported by this architecture.
 
-Phase 1 may begin once the protocol, key-storage and relay choices above are resolved. Phases and model assignments are in [the implementation plan](../FREEGRAM_IMPLEMENTATION_PLAN.md).
+Phase 1 prototyping began with a pinned signing library and explicit key-storage limits. The relay and device checks above remain gates before a field pilot. Phases and model assignments are in [the implementation plan](../FREEGRAM_IMPLEMENTATION_PLAN.md).
