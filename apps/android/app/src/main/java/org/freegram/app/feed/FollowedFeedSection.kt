@@ -37,10 +37,10 @@ fun FollowedFeedSection(
             value = authorInput,
             onValueChange = onAuthorInputChange,
             enabled = enabled,
-            label = { Text("Author public key (64 hex characters)") },
+            label = { Text("Author public key (npub1… or 64 hex characters)") },
             modifier = Modifier.fillMaxWidth(),
         )
-        Button(enabled = enabled && authorInput.trim().length == 64, onClick = onFollow) { Text("Follow key") }
+        Button(enabled = enabled && (authorInput.trim().length == 64 || authorInput.trim().startsWith("npub1", ignoreCase = true)), onClick = onFollow) { Text("Follow key") }
         policies.forEach { policy ->
             Text("${policy.pubkey} · ${policy.state.name.lowercase()}")
             when (policy.state) {

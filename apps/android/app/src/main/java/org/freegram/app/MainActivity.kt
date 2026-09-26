@@ -30,7 +30,9 @@ import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
+import org.freegram.app.identity.IdentitySection
 import org.freegram.app.identity.ProtectedIdentity
+import org.freegram.app.protocol.Nip19
 import org.freegram.app.feed.FollowedFeedSection
 import org.freegram.app.feed.FollowedFeedSync
 import org.freegram.app.feed.RelayRefreshResult
@@ -72,6 +74,13 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
     var busy by remember { mutableStateOf(false) }
     var ready by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
+    var npub by remember { mutableStateOf("") }
+    var pubkeyHex by remember { mutableStateOf("") }
+    var revealedBackup by remember { mutableStateOf<String?>(null) }
+    var restoreInput by remember { mutableStateOf("") }
+    var confirmingRestore by remember { mutableStateOf(false) }
+    var confirmingReplace by remember { mutableStateOf(false) }
+    var identityMessage by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
@@ -99,6 +108,12 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
         secondState = details.third
     }
 
+    suspend fun refreshIdentity() {
+        val keys = withContext(Dispatchers.IO) { identity.npub() to identity.publicKeyHex() }
+        npub = keys.first
+        pubkeyHex = keys.second
+    }
+
     LaunchedEffect(store) {
         try {
             val restored = withContext(Dispatchers.IO) {
@@ -110,6 +125,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             refreshAuthorPolicies()
             feedEvents = withContext(Dispatchers.IO) { store.feedEvents() }
             restored.second.firstOrNull()?.let { showEvent(it) }
+            refreshIdentity()
             ready = true
         } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
     }
@@ -153,7 +169,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Freegram prototype", style = MaterialTheme.typography.headlineMedium)
-            Text("Public text bulletins. Anyone who gets a signed post can copy it. This prototype has no nearby transport or account recovery; do not rely on it for safety-critical communication.")
+            Text("Public text bulletins. Anyone who gets a signed post can copy it. This prototype has no nearby transport; do not rely on it for safety-critical communication.")
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
@@ -237,7 +253,11 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     scope.launch {
                         busy = true
                         try {
-                            withContext(Dispatchers.IO) { store.setAuthorState(authorInput.trim().lowercase(), AuthorState.FOLLOWING) }
+                            val key = authorInput.trim().let { input ->
+                                if (input.startsWith("npub1", ignoreCase = true)) Nip19.decodePublicKey(input).joinToString("") { "%02x".format(it) }
+                                else input.lowercase()
+                            }
+                            withContext(Dispatchers.IO) { store.setAuthorState(key, AuthorState.FOLLOWING) }
                             authorInput = ""
                             refreshAuthorPolicies()
                             refreshSavedEvents()
@@ -355,6 +375,52 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     }
                 }) { Text("Open ${saved.id.take(12)}…") }
             }
+            IdentitySection(
+                npub = npub,
+                pubkeyHex = pubkeyHex,
+                revealedBackup = revealedBackup,
+                restoreInput = restoreInput,
+                onRestoreInputChange = { restoreInput = it; confirmingRestore = false },
+                confirmingRestore = confirmingRestore,
+                confirmingReplace = confirmingReplace,
+                message = identityMessage,
+                enabled = ready && !busy,
+                onReveal = {
+                    scope.launch {
+                        try { revealedBackup = withContext(Dispatchers.IO) { identity.exportNsec() } }
+                        catch (failure: Exception) { identityMessage = failure.message ?: "Could not read key" }
+                    }
+                },
+                onHide = { revealedBackup = null },
+                onRestore = {
+                    if (!confirmingRestore) { confirmingRestore = true; confirmingReplace = false }
+                    else scope.launch {
+                        busy = true
+                        try {
+                            withContext(Dispatchers.IO) { identity.restore(restoreInput) }
+                            restoreInput = ""
+                            revealedBackup = null
+                            refreshIdentity()
+                            identityMessage = "Identity restored. New posts are signed with this key."
+                        } catch (failure: Exception) { identityMessage = failure.message ?: "Restore failed; current key kept" }
+                        finally { confirmingRestore = false; busy = false }
+                    }
+                },
+                onReplace = {
+                    if (!confirmingReplace) { confirmingReplace = true; confirmingRestore = false }
+                    else scope.launch {
+                        busy = true
+                        try {
+                            withContext(Dispatchers.IO) { identity.replaceWithNewKey() }
+                            revealedBackup = null
+                            refreshIdentity()
+                            identityMessage = "New key created. Back it up and share the new public key."
+                        } catch (failure: Exception) { identityMessage = failure.message ?: "Could not create key" }
+                        finally { confirmingReplace = false; busy = false }
+                    }
+                },
+                onCancelConfirm = { confirmingRestore = false; confirmingReplace = false },
+            )
         }
     }
 }
