@@ -1,5 +1,8 @@
 package org.freegram.app
 
+import android.content.ClipData
+import android.content.ClipboardManager
+import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
@@ -22,6 +25,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Modifier
+import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -30,6 +34,7 @@ import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.relay.RelayClient
+import org.freegram.app.relay.FetchResult
 import org.freegram.app.store.RoomStore
 
 class MainActivity : ComponentActivity() {
@@ -46,6 +51,9 @@ class MainActivity : ComponentActivity() {
 private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayClient: RelayClient) {
     var draft by remember { mutableStateOf("") }
     var event by remember { mutableStateOf<BulletinEvent?>(null) }
+    var canDeliver by remember { mutableStateOf(false) }
+    var importWire by remember { mutableStateOf("") }
+    var lookupId by remember { mutableStateOf("") }
     var firstRelay by remember { mutableStateOf(store.relayUrl(0)) }
     var secondRelay by remember { mutableStateOf(store.relayUrl(1)) }
     var firstState by remember { mutableStateOf("") }
@@ -54,6 +62,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
     var ready by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+    val context = LocalContext.current
 
     LaunchedEffect(store) {
         try {
@@ -66,6 +75,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             restored.second?.let { saved ->
                 firstState = withContext(Dispatchers.IO) { store.relayState(saved.id, firstRelay) }
                 secondState = withContext(Dispatchers.IO) { store.relayState(saved.id, secondRelay) }
+                canDeliver = withContext(Dispatchers.IO) { store.deliveryTargets(saved.id).isNotEmpty() }
             }
             ready = true
         } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
@@ -87,6 +97,23 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             if (store.relayState(saved.id, relays[1]) == "Accepted") "Accepted" else relayClient.publish(relays[1], saved).also { store.setRelayState(saved.id, relays[1], it) }
         }
         secondState = second
+    }
+
+    suspend fun fetchFrom(relay: String) {
+        val id = lookupId.trim().lowercase()
+        val result = withContext(Dispatchers.IO) { relayClient.fetch(relay.trim(), id) }
+        when (result) {
+            is FetchResult.Found -> {
+                withContext(Dispatchers.IO) { store.saveReceivedEvent(result.event) }
+                event = result.event
+                canDeliver = withContext(Dispatchers.IO) { store.deliveryTargets(result.event.id).isNotEmpty() }
+                firstState = withContext(Dispatchers.IO) { store.relayState(result.event.id, firstRelay.trim()) }
+                secondState = withContext(Dispatchers.IO) { store.relayState(result.event.id, secondRelay.trim()) }
+                error = "Fetched and verified ${result.event.id.take(12)}… from $relay"
+            }
+            FetchResult.NotFound -> error = "Relay has no stored event for that ID"
+            is FetchResult.Failed -> error = "Fetch failed: ${result.reason}"
+        }
     }
 
     MaterialTheme {
@@ -128,6 +155,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                             signed
                         }
                         event = saved
+                        canDeliver = true
                         draft = ""
                         firstState = "Pending"
                         secondState = "Pending"
@@ -142,19 +170,81 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             event?.let { saved ->
                 Text("Latest saved bulletin", style = MaterialTheme.typography.titleMedium)
                 Text(saved.content)
+                Text("Signature valid. Author identity and report accuracy are not verified.")
+                Text("Author key: ${saved.pubkey}")
                 Text("Event ID: ${saved.id}")
                 Text("Relay 1: $firstState")
                 Text("Relay 2: $secondState")
-                Button(enabled = ready && !busy, onClick = {
-                    scope.launch {
-                        busy = true
-                        error = ""
-                        try { deliver(saved) }
-                        catch (failure: Exception) { error = failure.message ?: "Retry failed" }
-                        finally { busy = false }
-                    }
-                }) { Text("Retry relay delivery") }
+                Button(onClick = {
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    clipboard.setPrimaryClip(ClipData.newPlainText("Freegram signed event", Nip01Protocol.toJson(saved)))
+                    error = "Signed public event copied. It contains no private key."
+                }) { Text("Copy signed event JSON") }
+                if (canDeliver) {
+                    Button(enabled = ready && !busy, onClick = {
+                        scope.launch {
+                            busy = true
+                            error = ""
+                            try { deliver(saved) }
+                            catch (failure: Exception) { error = failure.message ?: "Relay delivery failed" }
+                            finally { busy = false }
+                        }
+                    }) { Text("Submit saved event to relays") }
+                }
             }
+            Text("Bridge test", style = MaterialTheme.typography.titleMedium)
+            Text("Move signed public JSON to another phone by a method you choose. Importing never uses that phone's signing key.")
+            OutlinedTextField(
+                value = importWire,
+                onValueChange = { importWire = it },
+                enabled = ready && !busy,
+                label = { Text("Paste signed event JSON") },
+                modifier = Modifier.fillMaxWidth(),
+                minLines = 3,
+            )
+            Button(enabled = ready && !busy && importWire.isNotBlank() && importWire.toByteArray(Charsets.UTF_8).size <= 4096, onClick = {
+                scope.launch {
+                    busy = true
+                    error = ""
+                    try {
+                        val imported = Nip01Protocol.fromJson(importWire.trim())
+                        require(Nip01Protocol.verifyBulletin(imported)) { "Invalid event ID or signature" }
+                        withContext(Dispatchers.IO) { store.saveEvent(imported, listOf(firstRelay.trim(), secondRelay.trim())) }
+                        event = imported
+                        canDeliver = true
+                        firstState = withContext(Dispatchers.IO) { store.relayState(imported.id, firstRelay.trim()) }
+                        secondState = withContext(Dispatchers.IO) { store.relayState(imported.id, secondRelay.trim()) }
+                        importWire = ""
+                        error = "Verified and saved for explicit relay submission"
+                    } catch (failure: Exception) { error = failure.message ?: "Import failed" }
+                    finally { busy = false }
+                }
+            }) { Text("Verify and carry event") }
+            OutlinedTextField(
+                value = lookupId,
+                onValueChange = { lookupId = it },
+                enabled = ready && !busy,
+                label = { Text("Event ID to fetch") },
+                modifier = Modifier.fillMaxWidth(),
+            )
+            Button(enabled = ready && !busy && lookupId.trim().length == 64, onClick = {
+                scope.launch {
+                    busy = true
+                    error = ""
+                    try { fetchFrom(firstRelay) }
+                    catch (failure: Exception) { error = failure.message ?: "Fetch failed" }
+                    finally { busy = false }
+                }
+            }) { Text("Fetch from relay 1") }
+            Button(enabled = ready && !busy && lookupId.trim().length == 64, onClick = {
+                scope.launch {
+                    busy = true
+                    error = ""
+                    try { fetchFrom(secondRelay) }
+                    catch (failure: Exception) { error = failure.message ?: "Fetch failed" }
+                    finally { busy = false }
+                }
+            }) { Text("Fetch from relay 2") }
         }
     }
 }
