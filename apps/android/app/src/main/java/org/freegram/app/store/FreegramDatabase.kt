@@ -2,6 +2,7 @@ package org.freegram.app.store
 
 import androidx.room.Dao
 import androidx.room.AutoMigration
+import androidx.room.ColumnInfo
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -12,8 +13,11 @@ import androidx.room.PrimaryKey
 import androidx.room.Query
 import androidx.room.RoomDatabase
 
+/** `hops` counts nearby transfers before this copy arrived (0 = authored here or fetched from a relay). It is not signed. */
 @Entity(tableName = "bulletins")
-data class BulletinRow(@PrimaryKey val id: String, val createdAt: Long, val wire: String)
+data class BulletinRow(@PrimaryKey val id: String, val createdAt: Long, val wire: String, @ColumnInfo(defaultValue = "0") val hops: Int = 0)
+
+data class NearbyRow(val id: String, val wire: String, val hops: Int)
 
 @Entity(
     tableName = "relay_deliveries",
@@ -54,6 +58,10 @@ interface BulletinDao {
     ) suspend fun evictionCandidates(): List<EvictionCandidate>
     @Query("DELETE FROM relay_deliveries WHERE eventId = :eventId") suspend fun deleteDeliveries(eventId: String)
     @Query("DELETE FROM bulletins WHERE id = :eventId") suspend fun deleteBulletin(eventId: String)
+    @Query(
+        "SELECT id, wire, hops FROM bulletins WHERE createdAt BETWEEN :minCreatedAt AND :maxCreatedAt AND hops < :maxHops " +
+            "ORDER BY createdAt DESC, id DESC LIMIT 200"
+    ) suspend fun nearbyCandidates(minCreatedAt: Long, maxCreatedAt: Long, maxHops: Int): List<NearbyRow>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setAuthorPolicy(row: AuthorPolicyRow)
     @Query("DELETE FROM author_policies WHERE pubkey = :pubkey") suspend fun removeAuthorPolicy(pubkey: String)
     @Query("SELECT * FROM author_policies ORDER BY pubkey") suspend fun authorPolicies(): List<AuthorPolicyRow>
@@ -63,8 +71,8 @@ interface BulletinDao {
 
 @Database(
     entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class],
-    version = 2,
-    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    version = 3,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
     exportSchema = true,
 )
 abstract class FreegramDatabase : RoomDatabase() {

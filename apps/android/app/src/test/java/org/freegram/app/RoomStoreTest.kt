@@ -223,6 +223,7 @@ class RoomStoreTest {
         store.initialize()
         assertEquals(listOf(signed), store.savedEvents())
         assertEquals("Accepted", store.relayState(signed.id, "wss://one.example"))
+        assertEquals(listOf(signed to 0), store.nearbyOffers(0, Long.MAX_VALUE, 6, 10))
         store.setAuthorState(signed.pubkey, AuthorState.FOLLOWING)
         assertEquals(listOf(signed), store.feedEvents())
         store.close()

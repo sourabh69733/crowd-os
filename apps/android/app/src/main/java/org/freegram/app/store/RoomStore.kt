@@ -56,7 +56,25 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     /** Returns false when the store is full and the post is older than everything that could make room. */
     suspend fun saveReceivedEvent(event: BulletinEvent): Boolean = saveVerified(event, emptyList())
 
-    private suspend fun saveVerified(event: BulletinEvent, relays: List<String>): Boolean {
+    /** Stores a post received from a nearby peer after [hops] transfers. Returns false as for [saveReceivedEvent]. */
+    suspend fun saveNearbyEvent(event: BulletinEvent, hops: Int): Boolean {
+        require(hops > 0)
+        return saveVerified(event, emptyList(), hops)
+    }
+
+    suspend fun hasBulletin(eventId: String): Boolean = dao.hasBulletin(eventId)
+
+    /** Verified posts this phone may offer to a nearby peer, newest first, with their hop counts. */
+    suspend fun nearbyOffers(minCreatedAt: Long, maxCreatedAt: Long, maxHops: Int, limit: Int): List<Pair<BulletinEvent, Int>> {
+        val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        return dao.nearbyCandidates(minCreatedAt, maxCreatedAt, maxHops).mapNotNull { row ->
+            runCatching { Nip01Protocol.fromJson(row.wire) }.getOrNull()
+                ?.takeIf { it.pubkey !in blocked && Nip01Protocol.verifyBulletin(it) }
+                ?.let { it to row.hops }
+        }.take(limit)
+    }
+
+    private suspend fun saveVerified(event: BulletinEvent, relays: List<String>, hops: Int = 0): Boolean {
         require(Nip01Protocol.verifyBulletin(event))
         return database.withTransaction {
             require(dao.authorState(event.pubkey) != AuthorState.BLOCKED.name) { "This author is blocked" }
@@ -68,7 +86,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
                 dao.deleteDeliveries(victim.id)
                 dao.deleteBulletin(victim.id)
             }
-            dao.insertBulletin(BulletinRow(event.id, event.createdAt, Nip01Protocol.toJson(event)))
+            dao.insertBulletin(BulletinRow(event.id, event.createdAt, Nip01Protocol.toJson(event), hops))
             relays.forEach { dao.insertRelay(RelayDeliveryRow(event.id, it, "Pending")) }
             true
         }
