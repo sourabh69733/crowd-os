@@ -52,4 +52,6 @@ dependencies {
     testImplementation("fr.acinq.secp256k1:secp256k1-kmp-jni-jvm:0.24.0")
     testImplementation("androidx.room:room-testing:2.8.5")
     testImplementation("org.robolectric:robolectric:4.16.1")
+    testImplementation("com.squareup.okhttp3:mockwebserver:4.12.0")
+    testImplementation("com.squareup.okhttp3:okhttp-tls:4.12.0")
 }

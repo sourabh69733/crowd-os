@@ -20,8 +20,7 @@ sealed interface FetchResult {
     data class Failed(val reason: String) : FetchResult
 }
 
-class RelayClient {
-    private val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()
+class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()) {
 
     suspend fun publish(relay: String, event: BulletinEvent): String {
         require(relay.startsWith("wss://"))
