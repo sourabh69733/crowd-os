@@ -81,19 +81,70 @@ class RoomStoreTest {
         store.close()
     }
 
-    @Test fun fullStoreKeepsExistingEventButRejectsNewEvent() = runBlocking {
+    private val relayTargets = listOf("wss://one.example", "wss://two.example")
+    private fun signedBy(key: Int, at: Long) = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = key.toByte() }, "Post $at", at)
+    private suspend fun RoomStore.accept(id: String) = relayTargets.forEach { setRelayState(id, it, "Accepted") }
+    private suspend fun RoomStore.ids() = savedEvents().map { it.id }.toSet()
+
+    @Test fun fullStoreRefusesOnlyWhenEveryPostAwaitsRelays() = runBlocking {
         val store = RoomStore(context, databaseName)
         store.initialize()
-        val relayTargets = listOf("wss://one.example", "wss://two.example")
         val first = event()
         for (offset in 0 until 100) store.saveEvent(event(1_700_000_000L + offset), relayTargets)
         store.setRelayState(first.id, relayTargets[0], "Accepted")
         store.saveEvent(first, relayTargets)
         assertEquals("Accepted", store.relayState(first.id, relayTargets[0]))
-        try {
-            store.saveEvent(event(1_700_000_100L), relayTargets)
-            fail("Expected full outbox rejection")
-        } catch (_: IllegalStateException) { }
+        assertThrows(IllegalStateException::class.java) { runBlocking { store.saveEvent(event(1_700_000_100L), relayTargets) } }
+        assertThrows(IllegalStateException::class.java) { runBlocking { store.saveReceivedEvent(event(1_700_000_101L)) } }
+        assertEquals(100, store.savedEvents().size)
+        store.close()
+    }
+
+    @Test fun fullStoreEvictsOldestReceivedBeforeAcceptedOutbox() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val oldAccepted = event(1_600_000_000).also { store.saveEvent(it, relayTargets); store.accept(it.id) }
+        val waiting = event(1_600_000_001).also { store.saveEvent(it, relayTargets) }
+        val received = (0 until 98).map { signedBy(5, 1_700_000_000L + it).also { e -> store.saveReceivedEvent(e) } }
+        assertEquals(100, store.savedEvents().size)
+
+        val newPost = event(1_800_000_000).also { store.saveEvent(it, relayTargets) }
+        assertFalse(received[0].id in store.ids())
+        assertTrue(listOf(oldAccepted.id, waiting.id, newPost.id, received[1].id).all { it in store.ids() })
+
+        assertTrue(store.saveReceivedEvent(signedBy(5, 1_750_000_000)))
+        assertFalse(received[1].id in store.ids())
+        assertEquals(100, store.savedEvents().size)
+        store.close()
+    }
+
+    @Test fun olderReceivedPostDoesNotPushOutNewerOnes() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        repeat(100) { store.saveReceivedEvent(signedBy(5, 1_700_000_000L + it)) }
+        val before = store.ids()
+        val stale = signedBy(5, 1_600_000_000)
+        assertFalse(store.saveReceivedEvent(stale))
+        assertEquals(before, store.ids())
+        assertTrue(store.saveReceivedEvent(signedBy(5, 1_700_000_200)))
+        assertFalse(before.minus(store.ids()).isEmpty())
+        assertEquals(100, store.ids().size)
+        store.close()
+    }
+
+    @Test fun blockedAuthorPostsAreEvictedFirstThenAcceptedOutbox() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val blockedPost = signedBy(7, 1_800_000_000).also { store.saveReceivedEvent(it) }
+        val accepted = (0 until 99).map { event(1_600_000_000L + it).also { e -> store.saveEvent(e, relayTargets); store.accept(e.id) } }
+        store.setAuthorState(blockedPost.pubkey, AuthorState.BLOCKED)
+
+        store.saveEvent(event(1_900_000_000), relayTargets)
+        assertEquals(100, store.savedEvents().size)
+        assertTrue(accepted.all { it.id in store.ids() }) // the hidden blocked copy made room
+        store.saveEvent(event(1_900_000_001), relayTargets)
+        assertFalse(accepted[0].id in store.ids())
+        assertTrue(store.deliveryTargets(accepted[0].id).isEmpty())
         store.close()
     }
 

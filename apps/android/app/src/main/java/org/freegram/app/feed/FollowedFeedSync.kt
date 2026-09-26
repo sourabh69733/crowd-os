@@ -30,9 +30,10 @@ class FollowedFeedSync(private val store: RoomStore, private val relayClient: Re
         }
         return relays.zip(fetched).map { (relay, result) ->
             var full = false
+            var older = 0
             for (event in result.events) {
                 try {
-                    store.saveReceivedEvent(event)
+                    if (!store.saveReceivedEvent(event)) older++
                 } catch (_: IllegalArgumentException) {
                     // An author may have been blocked while the relay was responding.
                 } catch (_: IllegalStateException) {
@@ -40,7 +41,12 @@ class FollowedFeedSync(private val store: RoomStore, private val relayClient: Re
                     break
                 }
             }
-            RelayRefreshResult(relay, if (full) "${result.status}; local store full" else result.status, result.events.size)
+            val status = when {
+                full -> "${result.status}; local store full of posts waiting for relays"
+                older > 0 -> "${result.status}; $older older posts not kept (store full)"
+                else -> result.status
+            }
+            RelayRefreshResult(relay, status, result.events.size)
         }
     }
 }

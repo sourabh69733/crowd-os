@@ -165,10 +165,11 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
         val result = withContext(Dispatchers.IO) { relayClient.fetch(relay.trim(), id) }
         when (result) {
             is FetchResult.Found -> {
-                withContext(Dispatchers.IO) { store.saveReceivedEvent(result.event) }
+                val kept = withContext(Dispatchers.IO) { store.saveReceivedEvent(result.event) }
                 refreshSavedEvents()
                 showEvent(result.event)
-                error = "Fetched and verified ${result.event.id.take(12)}… from $relay"
+                error = "Fetched and verified ${result.event.id.take(12)}… from $relay" +
+                    if (kept) "" else ". Not saved: store is full of newer posts."
             }
             FetchResult.NotFound -> error = "Relay has no stored event for that ID"
             is FetchResult.Failed -> error = "Fetch failed: ${result.reason}"

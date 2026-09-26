@@ -29,6 +29,9 @@ data class DraftRow(@PrimaryKey val slot: Int = 0, val content: String)
 @Entity(tableName = "author_policies")
 data class AuthorPolicyRow(@PrimaryKey val pubkey: String, val state: String)
 
+/** A stored bulletin with no unsettled relay delivery; `targets` is 0 for received posts. */
+data class EvictionCandidate(val id: String, val createdAt: Long, val wire: String, val targets: Int)
+
 @Dao
 interface BulletinDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertBulletin(row: BulletinRow)
@@ -44,6 +47,13 @@ interface BulletinDao {
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId ORDER BY relay") suspend fun deliveryTargets(eventId: String): List<String>
     @Query("SELECT * FROM relay_deliveries WHERE state != 'Accepted' ORDER BY eventId, relay") suspend fun unsettledDeliveries(): List<RelayDeliveryRow>
     @Query("SELECT wire FROM bulletins WHERE id = :eventId") suspend fun wire(eventId: String): String?
+    @Query(
+        "SELECT b.id, b.createdAt, b.wire, (SELECT COUNT(*) FROM relay_deliveries r WHERE r.eventId = b.id) AS targets " +
+            "FROM bulletins b WHERE NOT EXISTS (SELECT 1 FROM relay_deliveries r WHERE r.eventId = b.id AND r.state != 'Accepted') " +
+            "ORDER BY b.createdAt, b.id"
+    ) suspend fun evictionCandidates(): List<EvictionCandidate>
+    @Query("DELETE FROM relay_deliveries WHERE eventId = :eventId") suspend fun deleteDeliveries(eventId: String)
+    @Query("DELETE FROM bulletins WHERE id = :eventId") suspend fun deleteBulletin(eventId: String)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setAuthorPolicy(row: AuthorPolicyRow)
     @Query("DELETE FROM author_policies WHERE pubkey = :pubkey") suspend fun removeAuthorPolicy(pubkey: String)
     @Query("SELECT * FROM author_policies ORDER BY pubkey") suspend fun authorPolicies(): List<AuthorPolicyRow>

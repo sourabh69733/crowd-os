@@ -50,21 +50,42 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     suspend fun saveEvent(event: BulletinEvent, relays: List<String>) {
         require(relays.size == 2 && relays.distinct().size == 2 && relays.all { it.startsWith("wss://") })
-        saveVerified(event, relays)
+        check(saveVerified(event, relays))
     }
 
-    suspend fun saveReceivedEvent(event: BulletinEvent) = saveVerified(event, emptyList())
+    /** Returns false when the store is full and the post is older than everything that could make room. */
+    suspend fun saveReceivedEvent(event: BulletinEvent): Boolean = saveVerified(event, emptyList())
 
-    private suspend fun saveVerified(event: BulletinEvent, relays: List<String>) {
+    private suspend fun saveVerified(event: BulletinEvent, relays: List<String>): Boolean {
         require(Nip01Protocol.verifyBulletin(event))
-        database.withTransaction {
+        return database.withTransaction {
             require(dao.authorState(event.pubkey) != AuthorState.BLOCKED.name) { "This author is blocked" }
-            if (dao.bulletinCount() >= 100 && !dao.hasBulletin(event.id)) {
-                error("Local outbox is full")
+            if (dao.bulletinCount() >= MAX_BULLETINS && !dao.hasBulletin(event.id)) {
+                val victim = evictionVictim() ?: error("Local store is full of posts still waiting for relays")
+                if (relays.isEmpty() && victim.targets == 0 && !victim.blocked && victim.createdAt > event.createdAt) {
+                    return@withTransaction false
+                }
+                dao.deleteDeliveries(victim.id)
+                dao.deleteBulletin(victim.id)
             }
             dao.insertBulletin(BulletinRow(event.id, event.createdAt, Nip01Protocol.toJson(event)))
             relays.forEach { dao.insertRelay(RelayDeliveryRow(event.id, it, "Pending")) }
+            true
         }
+    }
+
+    private data class Victim(val id: String, val createdAt: Long, val targets: Int, val blocked: Boolean)
+
+    /** Blocked authors first, then the oldest received post, then the oldest fully accepted outbox post. */
+    private suspend fun evictionVictim(): Victim? {
+        val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        val candidates = dao.evictionCandidates().map { row ->
+            val pubkey = runCatching { Nip01Protocol.fromJson(row.wire).pubkey }.getOrNull()
+            Victim(row.id, row.createdAt, row.targets, pubkey == null || pubkey in blocked)
+        }
+        return candidates.firstOrNull { it.blocked }
+            ?: candidates.firstOrNull { it.targets == 0 }
+            ?: candidates.firstOrNull()
     }
 
     suspend fun latestEvent(): BulletinEvent? = savedEvents().firstOrNull()
@@ -121,6 +142,8 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     fun close() = database.close()
 
     companion object {
+        const val MAX_BULLETINS = 100
+
         @Volatile private var shared: RoomStore? = null
 
         /** One database instance per process, shared by the UI and background retry. */
