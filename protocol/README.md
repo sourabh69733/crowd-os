@@ -5,3 +5,17 @@ The first transport-independent object is a public, signed NIP-01 `kind: 1` text
 Nearby exchange metadata (connection ID, per-device forwarding budget and acknowledgement) is **not** part of the Nostr event. It is local routing state; a noncompliant peer can copy or republish a public event, so routing limits are abuse controls rather than confidentiality guarantees.
 
 `vectors/nip01-id-v1.json` contains two canonical ID fixtures. They check serialization and SHA-256 only; neither fixture is a signed event. `vectors/bip340-test-vectors.csv` is copied from the official [BIP-340 test vectors](https://github.com/bitcoin/bips/blob/master/bip-0340/test-vectors.csv); the Android tests run vectors 0–14, whose messages are 32 bytes like Nostr event IDs. A portable signed-event fixture is still needed. Do not implement production cryptography from these documents.
+
+## Nearby exchange, version 1
+
+Each frame is one UTF-8 JSON array of at most 6 KiB. Both peers run the same steps; either may disconnect at any point.
+
+| Step | Frame | Rule |
+|---|---|---|
+| 1 | `["HELLO", 1, {}]` | Different version: stop. |
+| 2 | `["HAVE", [id, …]]` | At most 128 distinct 64-hex IDs, newest first. Only eligible posts (below). |
+| 3 | `["WANT", [id, …]]` | At most 32 IDs, all from the peer's `HAVE`; requesting anything else ends the exchange. |
+| 4 | `["EVENT", hops, event]` then `["SENT"]` | `hops` is how many nearby transfers the sender's copy made (0 = authored or fetched from a relay). The event is unchanged NIP-01 JSON. |
+| 5 | `["ACK", id]` or `["NACK", id, reason]` | `ACK` only after the receiver verified and durably stored the event. |
+
+Eligible to offer: verified `kind: 1`, author not blocked locally, `created_at` within the last 48 hours and at most 10 minutes ahead, `hops` below 6. The receiver checks the same limits, rejects unrequested or repeated events, and stores the copy with `hops + 1`. `ACK` means that one peer stored it, not that anyone else received it. Hop and age limits bind compliant clients only; a malicious peer can lie about `hops` or republish elsewhere. The Android implementation is `apps/android/.../nearby/`; it is transport-independent and has only been tested over in-memory links, not radios.
