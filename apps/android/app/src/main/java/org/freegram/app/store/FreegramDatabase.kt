@@ -42,6 +42,8 @@ interface BulletinDao {
     @Query("SELECT state FROM relay_deliveries WHERE eventId = :eventId AND relay = :relay") suspend fun relayState(eventId: String, relay: String): String?
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId AND state != 'Accepted' ORDER BY relay") suspend fun pendingRelays(eventId: String): List<String>
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId ORDER BY relay") suspend fun deliveryTargets(eventId: String): List<String>
+    @Query("SELECT * FROM relay_deliveries WHERE state != 'Accepted' ORDER BY eventId, relay") suspend fun unsettledDeliveries(): List<RelayDeliveryRow>
+    @Query("SELECT wire FROM bulletins WHERE id = :eventId") suspend fun wire(eventId: String): String?
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setAuthorPolicy(row: AuthorPolicyRow)
     @Query("DELETE FROM author_policies WHERE pubkey = :pubkey") suspend fun removeAuthorPolicy(pubkey: String)
     @Query("SELECT * FROM author_policies ORDER BY pubkey") suspend fun authorPolicies(): List<AuthorPolicyRow>

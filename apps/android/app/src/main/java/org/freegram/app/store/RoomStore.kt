@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.app.relay.RetryPolicy
 import org.json.JSONArray
 
 enum class AuthorState { FOLLOWING, MUTED, BLOCKED }
@@ -92,10 +93,24 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     suspend fun relayState(eventId: String, relay: String): String = dao.relayState(eventId, relay) ?: "Pending"
     suspend fun deliveryTargets(eventId: String): List<String> = dao.deliveryTargets(eventId)
     suspend fun pendingRelayTargets(eventId: String): List<String> = dao.pendingRelays(eventId)
-    suspend fun setRelayState(eventId: String, relay: String, state: String) {
-        require(state == "Accepted" || state == "Pending" || state == "Timed out" || state == "Network error" || state.startsWith("Rejected:"))
-        dao.setRelay(RelayDeliveryRow(eventId, relay, state))
+    /** Records a relay outcome and returns the stored state. A relay's `Accepted` is never replaced by a later failure. */
+    suspend fun setRelayState(eventId: String, relay: String, state: String): String {
+        require(
+            state == "Accepted" || state == "Pending" || state == "Sending" || state == "Timed out" || state == "Network error" ||
+                state.startsWith("Rejected:") || Regex("HTTP \\d{3}").matches(state)
+        )
+        return database.withTransaction {
+            if (dao.relayState(eventId, relay) == "Accepted") "Accepted"
+            else { dao.setRelay(RelayDeliveryRow(eventId, relay, state)); state }
+        }
     }
+
+    /** Events the user already asked to submit whose relays failed temporarily, newer than [notBeforeSeconds]. */
+    suspend fun retryableDeliveries(notBeforeSeconds: Long): List<Pair<BulletinEvent, List<String>>> =
+        dao.unsettledDeliveries().filter { RetryPolicy.isRetryable(it.state) }.groupBy { it.eventId }.mapNotNull { (id, rows) ->
+            val event = dao.wire(id)?.let { runCatching { Nip01Protocol.fromJson(it) }.getOrNull() }
+            event?.takeIf { it.createdAt >= notBeforeSeconds && Nip01Protocol.verifyBulletin(it) }?.let { it to rows.map { row -> row.relay } }
+        }
 
     fun relayUrl(index: Int): String = prefs.getString("relay_url_$index", if (index == 0) "wss://relay.damus.io" else "wss://nos.lol") ?: ""
     fun setRelayUrl(index: Int, url: String) {
@@ -104,4 +119,13 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     }
 
     fun close() = database.close()
+
+    companion object {
+        @Volatile private var shared: RoomStore? = null
+
+        /** One database instance per process, shared by the UI and background retry. */
+        fun shared(context: Context): RoomStore = shared ?: synchronized(this) {
+            shared ?: RoomStore(context.applicationContext).also { shared = it }
+        }
+    }
 }

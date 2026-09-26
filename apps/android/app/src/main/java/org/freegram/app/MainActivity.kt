@@ -39,6 +39,9 @@ import org.freegram.app.feed.RelayRefreshResult
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.relay.RelayClient
+import org.freegram.app.relay.RelayDelivery
+import org.freegram.app.relay.RelayRetryWorker
+import org.freegram.app.relay.RetryPolicy
 import org.freegram.app.relay.FetchResult
 import org.freegram.app.store.RoomStore
 import org.freegram.app.store.AuthorPolicy
@@ -47,7 +50,7 @@ import org.freegram.app.store.AuthorState
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        val store = RoomStore(applicationContext)
+        val store = RoomStore.shared(applicationContext)
         val identity = ProtectedIdentity(applicationContext)
         val relayClient = RelayClient()
         setContent { FreegramScreen(store, identity, relayClient) }
@@ -126,6 +129,10 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             feedEvents = withContext(Dispatchers.IO) { store.feedEvents() }
             restored.second.firstOrNull()?.let { showEvent(it) }
             refreshIdentity()
+            val retryable = withContext(Dispatchers.IO) {
+                store.retryableDeliveries(System.currentTimeMillis() / 1000 - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty()
+            }
+            if (retryable) RelayRetryWorker.schedule(context)
             ready = true
         } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
     }
@@ -138,15 +145,20 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             store.setRelayUrl(0, relays[0])
             store.setRelayUrl(1, relays[1])
         }
-        val first = withContext(Dispatchers.IO) {
-            if (store.relayState(saved.id, relays[0]) == "Accepted") "Accepted" else relayClient.publish(relays[0], saved).also { store.setRelayState(saved.id, relays[0], it) }
+        val results = withContext(Dispatchers.IO) {
+            RelayDelivery(store, relayClient::publish).deliver(saved, relays) { relay, state ->
+                withContext(Dispatchers.Main) {
+                    if (event?.id == saved.id) {
+                        if (relay == relays[0]) firstState = state else secondState = state
+                    }
+                }
+            }
         }
-        firstState = first
-        val second = withContext(Dispatchers.IO) {
-            if (store.relayState(saved.id, relays[1]) == "Accepted") "Accepted" else relayClient.publish(relays[1], saved).also { store.setRelayState(saved.id, relays[1], it) }
-        }
-        secondState = second
+        if (results.values.any(RetryPolicy::isRetryable)) RelayRetryWorker.schedule(context)
     }
+
+    fun describe(state: String): String =
+        if (state != "Sending" && RetryPolicy.isRetryable(state)) "$state · will retry automatically when online" else state
 
     suspend fun fetchFrom(relay: String) {
         val id = lookupId.trim().lowercase()
@@ -219,8 +231,8 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                 Text("Author key: ${saved.pubkey}")
                 Text("Event ID: ${saved.id}")
                 if (canDeliver) {
-                    Text("Relay 1: $firstState")
-                    Text("Relay 2: $secondState")
+                    Text("Relay 1: ${describe(firstState)}")
+                    Text("Relay 2: ${describe(secondState)}")
                 } else {
                     Text("Verified locally; this phone has not queued relay delivery.")
                 }
