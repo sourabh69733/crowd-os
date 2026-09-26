@@ -20,7 +20,60 @@ sealed interface FetchResult {
     data class Failed(val reason: String) : FetchResult
 }
 
+data class AuthorFetchResult(val events: List<BulletinEvent>, val status: String)
+
 class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()) {
+
+    suspend fun fetchAuthors(relay: String, authors: List<String>, nowSeconds: Long = System.currentTimeMillis() / 1000): AuthorFetchResult {
+        require(relay.startsWith("wss://"))
+        val subscription = "freegram-feed-${UUID.randomUUID()}"
+        val request = AuthorRelayFrames.request(subscription, authors)
+        val requestedAuthors = authors.toSet()
+        val events = LinkedHashMap<String, BulletinEvent>()
+        val status = withTimeoutOrNull(12_000) {
+            suspendCancellableCoroutine<String> { continuation ->
+                var frames = 0
+                val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {
+                    private fun finish(webSocket: WebSocket, result: String) {
+                        if (continuation.isActive) continuation.resume(result)
+                        webSocket.send("[\"CLOSE\",\"$subscription\"]")
+                        webSocket.close(1000, null)
+                    }
+
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        if (!webSocket.send(request)) finish(webSocket, "Could not send request")
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        if (!continuation.isActive) return
+                        if (++frames > 200) return finish(webSocket, "Frame limit reached")
+                        when (val frame = AuthorRelayFrames.parse(text, subscription, requestedAuthors, nowSeconds)) {
+                            is AuthorFrame.Verified -> {
+                                val reachedLimit = synchronized(events) {
+                                    events.putIfAbsent(frame.event.id, frame.event)
+                                    events.size >= 50
+                                }
+                                if (reachedLimit) finish(webSocket, "Event limit reached")
+                            }
+                            is AuthorFrame.Closed -> finish(webSocket, "Relay closed: ${frame.reason}")
+                            AuthorFrame.End -> finish(webSocket, "Complete")
+                            AuthorFrame.Ignore -> Unit
+                        }
+                    }
+
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        if (continuation.isActive) continuation.resume("Network error")
+                    }
+
+                    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        if (continuation.isActive) continuation.resume("Connection closed")
+                    }
+                })
+                continuation.invokeOnCancellation { socket.cancel() }
+            }
+        } ?: "Timed out"
+        return AuthorFetchResult(synchronized(events) { events.values.toList() }, status)
+    }
 
     suspend fun publish(relay: String, event: BulletinEvent): String {
         require(relay.startsWith("wss://"))
@@ -46,7 +99,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                         }
                     }
 
-                    override fun onFailure(webSocket: WebSocket, error: Throwable, response: Response?) {
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         if (continuation.isActive) continuation.resume("Network error")
                     }
                 })
@@ -80,7 +133,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                         webSocket.close(1000, null)
                     }
 
-                    override fun onFailure(webSocket: WebSocket, error: Throwable, response: Response?) {
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
                         if (continuation.isActive) continuation.resume(FetchResult.Failed("Network error"))
                     }
 
