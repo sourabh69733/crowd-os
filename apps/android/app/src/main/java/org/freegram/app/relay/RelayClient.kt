@@ -10,8 +10,15 @@ import okhttp3.WebSocketListener
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.json.JSONArray
+import java.util.UUID
 import java.util.concurrent.TimeUnit
 import kotlin.coroutines.resume
+
+sealed interface FetchResult {
+    data class Found(val event: BulletinEvent) : FetchResult
+    data object NotFound : FetchResult
+    data class Failed(val reason: String) : FetchResult
+}
 
 class RelayClient {
     private val client = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()
@@ -47,5 +54,43 @@ class RelayClient {
                 continuation.invokeOnCancellation { socket.cancel() }
             }
         } ?: "Timed out"
+    }
+
+    suspend fun fetch(relay: String, eventId: String): FetchResult {
+        require(relay.startsWith("wss://"))
+        val subscription = "freegram-${UUID.randomUUID()}"
+        val request = RelayFrames.request(subscription, eventId)
+        return withTimeoutOrNull(12_000) {
+            suspendCancellableCoroutine<FetchResult> { continuation ->
+                val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {
+                    override fun onOpen(webSocket: WebSocket, response: Response) {
+                        if (!webSocket.send(request)) {
+                            if (continuation.isActive) continuation.resume(FetchResult.Failed("Could not send request"))
+                            webSocket.close(1000, null)
+                        }
+                    }
+
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        val result = when (val frame = RelayFrames.parse(text, subscription, eventId)) {
+                            is RelayFrame.Verified -> FetchResult.Found(frame.event)
+                            is RelayFrame.Closed -> FetchResult.Failed("Relay closed: ${frame.reason}")
+                            RelayFrame.End -> FetchResult.NotFound
+                            RelayFrame.Ignore -> return
+                        }
+                        if (continuation.isActive) continuation.resume(result)
+                        webSocket.close(1000, null)
+                    }
+
+                    override fun onFailure(webSocket: WebSocket, error: Throwable, response: Response?) {
+                        if (continuation.isActive) continuation.resume(FetchResult.Failed("Network error"))
+                    }
+
+                    override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
+                        if (continuation.isActive) continuation.resume(FetchResult.Failed("Connection closed"))
+                    }
+                })
+                continuation.invokeOnCancellation { socket.cancel() }
+            }
+        } ?: FetchResult.Failed("Timed out")
     }
 }

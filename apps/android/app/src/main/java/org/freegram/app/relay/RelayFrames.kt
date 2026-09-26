@@ -7,6 +7,7 @@ import org.json.JSONObject
 
 sealed interface RelayFrame {
     data class Verified(val event: BulletinEvent) : RelayFrame
+    data class Closed(val reason: String) : RelayFrame
     data object End : RelayFrame
     data object Ignore : RelayFrame
 }
@@ -29,6 +30,7 @@ object RelayFrames {
             if (message.optString(1) != subscription) return RelayFrame.Ignore
             when (message.optString(0)) {
                 "EOSE" -> RelayFrame.End
+                "CLOSED" -> RelayFrame.Closed(message.optString(2).take(120))
                 "EVENT" -> {
                     val wire = message.optJSONObject(2)?.toString() ?: return RelayFrame.Ignore
                     val event = Nip01Protocol.fromJson(wire)

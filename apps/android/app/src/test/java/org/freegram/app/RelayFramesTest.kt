@@ -30,5 +30,6 @@ class RelayFramesTest {
         assertEquals(RelayFrame.Ignore, RelayFrames.parse("x".repeat(8193), subscription, event.id))
         assertEquals(RelayFrame.End, RelayFrames.parse("[\"EOSE\",\"$subscription\"]", subscription, event.id))
         assertEquals(RelayFrame.Ignore, RelayFrames.parse("[\"EOSE\",\"other-sub\"]", subscription, event.id))
+        assertEquals(RelayFrame.Closed("blocked"), RelayFrames.parse("[\"CLOSED\",\"$subscription\",\"blocked\"]", subscription, event.id))
     }
 }
