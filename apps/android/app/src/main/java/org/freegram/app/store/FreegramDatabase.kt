@@ -1,6 +1,7 @@
 package org.freegram.app.store
 
 import androidx.room.Dao
+import androidx.room.AutoMigration
 import androidx.room.Database
 import androidx.room.Entity
 import androidx.room.ForeignKey
@@ -25,6 +26,9 @@ data class RelayDeliveryRow(val eventId: String, val relay: String, val state: S
 @Entity(tableName = "drafts")
 data class DraftRow(@PrimaryKey val slot: Int = 0, val content: String)
 
+@Entity(tableName = "author_policies")
+data class AuthorPolicyRow(@PrimaryKey val pubkey: String, val state: String)
+
 @Dao
 interface BulletinDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertBulletin(row: BulletinRow)
@@ -39,9 +43,19 @@ interface BulletinDao {
     @Query("SELECT state FROM relay_deliveries WHERE eventId = :eventId AND relay = :relay") suspend fun relayState(eventId: String, relay: String): String?
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId AND state != 'Accepted' ORDER BY relay") suspend fun pendingRelays(eventId: String): List<String>
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId ORDER BY relay") suspend fun deliveryTargets(eventId: String): List<String>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setAuthorPolicy(row: AuthorPolicyRow)
+    @Query("DELETE FROM author_policies WHERE pubkey = :pubkey") suspend fun removeAuthorPolicy(pubkey: String)
+    @Query("SELECT * FROM author_policies ORDER BY pubkey") suspend fun authorPolicies(): List<AuthorPolicyRow>
+    @Query("SELECT state FROM author_policies WHERE pubkey = :pubkey") suspend fun authorState(pubkey: String): String?
+    @Query("SELECT COUNT(*) FROM author_policies") suspend fun authorCount(): Int
 }
 
-@Database(entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class], version = 1, exportSchema = true)
+@Database(
+    entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class],
+    version = 2,
+    autoMigrations = [AutoMigration(from = 1, to = 2)],
+    exportSchema = true,
+)
 abstract class FreegramDatabase : RoomDatabase() {
     abstract fun bulletins(): BulletinDao
 }

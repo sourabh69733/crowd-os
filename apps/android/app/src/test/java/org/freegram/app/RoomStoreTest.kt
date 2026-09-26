@@ -4,6 +4,7 @@ import android.content.Context
 import kotlinx.coroutines.runBlocking
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.store.RoomStore
+import org.freegram.app.store.AuthorState
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -124,5 +125,72 @@ class RoomStoreTest {
         reopened.initialize()
         assertEquals(listOf(newer, older), reopened.savedEvents())
         reopened.close()
+    }
+
+    @Test fun authorControlsPersistAndBlockedEventsStayOutOfStorage() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val first = event()
+        store.saveReceivedEvent(first)
+        store.setAuthorState(first.pubkey, AuthorState.FOLLOWING)
+        assertEquals(listOf(first), store.feedEvents())
+        store.setAuthorState(first.pubkey, AuthorState.MUTED)
+        assertTrue(store.feedEvents().isEmpty())
+        assertEquals(listOf(first), store.savedEvents())
+        store.setAuthorState(first.pubkey, AuthorState.BLOCKED)
+        assertTrue(store.feedEvents().isEmpty())
+        assertTrue(store.savedEvents().isEmpty())
+        try {
+            store.saveReceivedEvent(event(1_700_000_060))
+            fail("Blocked author must not enter storage")
+        } catch (_: IllegalArgumentException) { }
+        store.close()
+
+        val reopened = RoomStore(context, databaseName)
+        reopened.initialize()
+        assertEquals(AuthorState.BLOCKED, reopened.authorPolicies().single().state)
+        reopened.removeAuthor(first.pubkey)
+        assertEquals(listOf(first), reopened.savedEvents())
+        assertTrue(reopened.feedEvents().isEmpty())
+        reopened.close()
+    }
+
+    @Test fun versionOneBulletinsSurviveAuthorPolicyMigration() = runBlocking {
+        val signed = event()
+        val old = context.openOrCreateDatabase(databaseName, Context.MODE_PRIVATE, null)
+        old.execSQL("CREATE TABLE bulletins (id TEXT NOT NULL PRIMARY KEY, createdAt INTEGER NOT NULL, wire TEXT NOT NULL)")
+        old.execSQL("CREATE TABLE relay_deliveries (eventId TEXT NOT NULL, relay TEXT NOT NULL, state TEXT NOT NULL, PRIMARY KEY(eventId, relay), FOREIGN KEY(eventId) REFERENCES bulletins(id) ON DELETE CASCADE)")
+        old.execSQL("CREATE INDEX index_relay_deliveries_eventId ON relay_deliveries(eventId)")
+        old.execSQL("CREATE TABLE drafts (slot INTEGER NOT NULL PRIMARY KEY, content TEXT NOT NULL)")
+        old.execSQL("INSERT INTO bulletins (id, createdAt, wire) VALUES (?, ?, ?)", arrayOf<Any>(signed.id, signed.createdAt, Nip01Protocol.toJson(signed)))
+        old.execSQL("INSERT INTO relay_deliveries (eventId, relay, state) VALUES (?, ?, ?)", arrayOf(signed.id, "wss://one.example", "Accepted"))
+        old.version = 1
+        old.close()
+
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        assertEquals(listOf(signed), store.savedEvents())
+        assertEquals("Accepted", store.relayState(signed.id, "wss://one.example"))
+        store.setAuthorState(signed.pubkey, AuthorState.FOLLOWING)
+        assertEquals(listOf(signed), store.feedEvents())
+        store.close()
+    }
+
+    @Test fun authorControlsRejectInvalidKeysAndCapTheList() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        try {
+            store.setAuthorState("not-a-key", AuthorState.FOLLOWING)
+            fail("Invalid public key must be rejected")
+        } catch (_: IllegalArgumentException) { }
+        for (number in 0 until 20) {
+            store.setAuthorState(number.toString(16).padStart(64, '0'), AuthorState.FOLLOWING)
+        }
+        try {
+            store.setAuthorState("f".repeat(64), AuthorState.FOLLOWING)
+            fail("The twenty-first author must be rejected")
+        } catch (_: IllegalStateException) { }
+        assertEquals(20, store.authorPolicies().size)
+        store.close()
     }
 }

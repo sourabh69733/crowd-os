@@ -9,6 +9,9 @@ import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.json.JSONArray
 
+enum class AuthorState { FOLLOWING, MUTED, BLOCKED }
+data class AuthorPolicy(val pubkey: String, val state: AuthorState)
+
 /** Durable local data for public bulletins. The Nostr signing secret is stored separately. */
 class RoomStore(context: Context, databaseName: String = "freegram.db") {
     private val prefs = context.getSharedPreferences("freegram_local", Context.MODE_PRIVATE)
@@ -54,6 +57,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     private suspend fun saveVerified(event: BulletinEvent, relays: List<String>) {
         require(Nip01Protocol.verifyBulletin(event))
         database.withTransaction {
+            require(dao.authorState(event.pubkey) != AuthorState.BLOCKED.name) { "This author is blocked" }
             if (dao.bulletinCount() >= 100 && !dao.hasBulletin(event.id)) {
                 error("Local outbox is full")
             }
@@ -63,8 +67,27 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     }
 
     suspend fun latestEvent(): BulletinEvent? = dao.latestWire()?.let(Nip01Protocol::fromJson)?.takeIf(Nip01Protocol::verifyBulletin)
-    suspend fun savedEvents(): List<BulletinEvent> = dao.savedWires().mapNotNull { wire ->
-        runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()?.takeIf(Nip01Protocol::verifyBulletin)
+    suspend fun savedEvents(): List<BulletinEvent> {
+        val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        return dao.savedWires().mapNotNull { wire ->
+            runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()
+                ?.takeIf { it.pubkey !in blocked && Nip01Protocol.verifyBulletin(it) }
+        }
+    }
+
+    suspend fun setAuthorState(pubkey: String, state: AuthorState) {
+        require(pubkey.length == 64 && pubkey.all { it in '0'..'9' || it in 'a'..'f' }) { "Use a 64-character lowercase public key" }
+        database.withTransaction {
+            check(dao.authorState(pubkey) != null || dao.authorCount() < 20) { "Author list is full" }
+            dao.setAuthorPolicy(AuthorPolicyRow(pubkey, state.name))
+        }
+    }
+
+    suspend fun removeAuthor(pubkey: String) { dao.removeAuthorPolicy(pubkey) }
+    suspend fun authorPolicies(): List<AuthorPolicy> = dao.authorPolicies().map { AuthorPolicy(it.pubkey, AuthorState.valueOf(it.state)) }
+    suspend fun feedEvents(): List<BulletinEvent> {
+        val followed = dao.authorPolicies().filter { it.state == AuthorState.FOLLOWING.name }.map { it.pubkey }.toSet()
+        return savedEvents().filter { it.pubkey in followed }
     }
     suspend fun relayState(eventId: String, relay: String): String = dao.relayState(eventId, relay) ?: "Pending"
     suspend fun deliveryTargets(eventId: String): List<String> = dao.deliveryTargets(eventId)
