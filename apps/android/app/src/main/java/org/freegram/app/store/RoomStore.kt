@@ -63,6 +63,9 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     }
 
     suspend fun latestEvent(): BulletinEvent? = dao.latestWire()?.let(Nip01Protocol::fromJson)?.takeIf(Nip01Protocol::verifyBulletin)
+    suspend fun savedEvents(): List<BulletinEvent> = dao.savedWires().mapNotNull { wire ->
+        runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()?.takeIf(Nip01Protocol::verifyBulletin)
+    }
     suspend fun relayState(eventId: String, relay: String): String = dao.relayState(eventId, relay) ?: "Pending"
     suspend fun deliveryTargets(eventId: String): List<String> = dao.deliveryTargets(eventId)
     suspend fun pendingRelayTargets(eventId: String): List<String> = dao.pendingRelays(eventId)

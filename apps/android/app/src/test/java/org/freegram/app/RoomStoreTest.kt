@@ -108,4 +108,21 @@ class RoomStoreTest {
         assertEquals(relays, store.deliveryTargets(signed.id))
         store.close()
     }
+
+    @Test fun savedBulletinsAreUniqueNewestFirstAndSurviveReopen() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val older = event(1_700_000_000)
+        val newer = event(1_700_000_060)
+        store.saveReceivedEvent(newer)
+        store.saveReceivedEvent(older)
+        store.saveReceivedEvent(newer)
+        assertEquals(listOf(newer, older), store.savedEvents())
+        store.close()
+
+        val reopened = RoomStore(context, databaseName)
+        reopened.initialize()
+        assertEquals(listOf(newer, older), reopened.savedEvents())
+        reopened.close()
+    }
 }
