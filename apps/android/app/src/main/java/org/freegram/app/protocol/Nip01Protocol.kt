@@ -35,6 +35,18 @@ object Nip01Protocol {
     private const val MAX_TAGS = 8
     private val hex = "0123456789abcdef".toCharArray()
 
+    fun parseImportedBulletin(wire: String): BulletinEvent {
+        val input = wire.trim()
+        require(input.startsWith("{")) { "For plain text, use Bulletin draft above. This field accepts copied signed event JSON." }
+        val event = try {
+            fromJson(input)
+        } catch (failure: Exception) {
+            throw IllegalArgumentException("Invalid signed event JSON", failure)
+        }
+        require(verifyBulletin(event)) { "Invalid event ID or signature" }
+        return event
+    }
+
     fun serializeForId(pubkey: String, createdAt: Long, kind: Int, tags: Array<Array<String>>, content: String): String =
         buildJsonArray {
             add(0)

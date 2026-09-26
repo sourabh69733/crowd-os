@@ -69,4 +69,16 @@ class ProtocolCompatibilityTest {
         assertFalse(Nip01Protocol.verifyBulletin(event.copy(content = "a".repeat(2049))))
         assertFalse(Nip01Protocol.verifyBulletin(event.copy(pubkey = "00".repeat(32))))
     }
+
+    @Test fun importExplainsPlainTextAndRejectsTampering() {
+        val plainTextError = assertThrows(IllegalArgumentException::class.java) {
+            Nip01Protocol.parseImportedBulletin("Help is needed")
+        }
+        assertTrue(plainTextError.message.orEmpty().contains("Bulletin draft"))
+
+        val signed = Nip01Protocol.signBulletin(hex("00".repeat(31) + "03"), "Help is needed", 1_700_000_000)
+        assertEquals(signed, Nip01Protocol.parseImportedBulletin(Nip01Protocol.toJson(signed)))
+        val changed = Nip01Protocol.toJson(signed).replace("Help is needed", "Help is here")
+        assertThrows(IllegalArgumentException::class.java) { Nip01Protocol.parseImportedBulletin(changed) }
+    }
 }

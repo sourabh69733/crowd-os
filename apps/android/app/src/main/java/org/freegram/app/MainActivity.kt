@@ -193,12 +193,12 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                 }
             }
             Text("Bridge test", style = MaterialTheme.typography.titleMedium)
-            Text("Move signed public JSON to another phone by a method you choose. Importing never uses that phone's signing key.")
+            Text("Only paste a signed event copied from another phone here. For a new plain-text post, use Bulletin draft above.")
             OutlinedTextField(
                 value = importWire,
                 onValueChange = { importWire = it },
                 enabled = ready && !busy,
-                label = { Text("Paste signed event JSON") },
+                label = { Text("Paste copied signed event JSON") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 3,
             )
@@ -207,8 +207,7 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     busy = true
                     error = ""
                     try {
-                        val imported = Nip01Protocol.fromJson(importWire.trim())
-                        require(Nip01Protocol.verifyBulletin(imported)) { "Invalid event ID or signature" }
+                        val imported = Nip01Protocol.parseImportedBulletin(importWire)
                         withContext(Dispatchers.IO) { store.saveEvent(imported, listOf(firstRelay.trim(), secondRelay.trim())) }
                         event = imported
                         canDeliver = true
