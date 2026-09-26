@@ -49,4 +49,23 @@ class AuthorRelayClientTest {
             server.shutdown()
         }
     }
+
+    @Test fun reportsRelayHandshakeStatus() = runBlocking {
+        val certificate = HeldCertificate.Builder().addSubjectAlternativeName("localhost").build()
+        val serverCertificates = HandshakeCertificates.Builder().heldCertificate(certificate).build()
+        val clientCertificates = HandshakeCertificates.Builder().addTrustedCertificate(certificate.certificate).build()
+        val server = MockWebServer()
+        server.useHttps(serverCertificates.sslSocketFactory(), false)
+        server.enqueue(MockResponse().setResponseCode(503))
+        server.start()
+        try {
+            val author = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = 3 }, "Test", 1_700_000_000).pubkey
+            val client = OkHttpClient.Builder().sslSocketFactory(clientCertificates.sslSocketFactory(), clientCertificates.trustManager).build()
+            val result = RelayClient(client).fetchAuthors("wss://localhost:${server.port}/", listOf(author), 1_700_000_000)
+            assertEquals("HTTP 503", result.status)
+            assertTrue(result.events.isEmpty())
+        } finally {
+            server.shutdown()
+        }
+    }
 }

@@ -62,7 +62,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                     }
 
                     override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
-                        if (continuation.isActive) continuation.resume("Network error")
+                        if (continuation.isActive) continuation.resume(response?.let { "HTTP ${it.code}" } ?: "Network error")
                     }
 
                     override fun onClosed(webSocket: WebSocket, code: Int, reason: String) {
