@@ -140,6 +140,7 @@ class RoomStoreTest {
         store.setAuthorState(first.pubkey, AuthorState.BLOCKED)
         assertTrue(store.feedEvents().isEmpty())
         assertTrue(store.savedEvents().isEmpty())
+        assertNull(store.latestEvent())
         try {
             store.saveReceivedEvent(event(1_700_000_060))
             fail("Blocked author must not enter storage")

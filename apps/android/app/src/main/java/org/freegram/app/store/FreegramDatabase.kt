@@ -35,7 +35,6 @@ interface BulletinDao {
     @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertRelay(row: RelayDeliveryRow)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setRelay(row: RelayDeliveryRow)
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setDraft(row: DraftRow)
-    @Query("SELECT wire FROM bulletins ORDER BY createdAt DESC, id DESC LIMIT 1") suspend fun latestWire(): String?
     @Query("SELECT wire FROM bulletins ORDER BY createdAt DESC, id DESC LIMIT 100") suspend fun savedWires(): List<String>
     @Query("SELECT COUNT(*) FROM bulletins") suspend fun bulletinCount(): Int
     @Query("SELECT EXISTS(SELECT 1 FROM bulletins WHERE id = :eventId)") suspend fun hasBulletin(eventId: String): Boolean

@@ -66,7 +66,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         }
     }
 
-    suspend fun latestEvent(): BulletinEvent? = dao.latestWire()?.let(Nip01Protocol::fromJson)?.takeIf(Nip01Protocol::verifyBulletin)
+    suspend fun latestEvent(): BulletinEvent? = savedEvents().firstOrNull()
     suspend fun savedEvents(): List<BulletinEvent> {
         val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
         return dao.savedWires().mapNotNull { wire ->
