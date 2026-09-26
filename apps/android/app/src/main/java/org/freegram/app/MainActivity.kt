@@ -105,6 +105,8 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 status = model.nearbyStatus,
                 log = model.nearbyLog,
                 enabled = model.ready,
+                autoBridge = model.autoBridge,
+                onAutoBridgeChange = model::changeAutoBridge,
                 onStart = model::startNearby,
                 onStop = model::stopNearby,
                 onPermissionDenied = model::nearbyPermissionDenied,

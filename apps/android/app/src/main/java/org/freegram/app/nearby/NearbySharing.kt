@@ -25,6 +25,7 @@ import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
+import org.freegram.app.relay.RelayRetryWorker
 import org.freegram.app.store.RoomStore
 
 /** Runtime permissions Nearby Connections needs on this Android version. */
@@ -47,7 +48,7 @@ fun hasPlayServices(context: Context): Boolean =
  * a pairing code because every post is public and signature-checked before storage.
  */
 class NearbySharing(
-    context: Context,
+    private val context: Context,
     private val store: RoomStore,
     private val scope: CoroutineScope,
     private val listener: Listener,
@@ -119,11 +120,13 @@ class NearbySharing(
             }
             listener.onStatus("Exchanging with $peer…")
             scope.launch {
-                val report = try { NearbyExchange(store).run(link) } finally {
+                val bridgeTo = if (store.autoBridge()) listOf(store.relayUrl(0), store.relayUrl(1)) else emptyList()
+                val report = try { NearbyExchange(store, bridgeTo = bridgeTo).run(link) } finally {
                     link.awaitFlushed(5_000)
                     client.disconnectFromEndpoint(endpointId)
                     release(endpointId)
                 }
+                if (report.received > 0 && bridgeTo.isNotEmpty()) RelayRetryWorker.schedule(context)
                 listener.onExchange(peer, report)
             }
         }

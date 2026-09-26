@@ -31,6 +31,8 @@ data class ExchangeReport(val offered: Int, val sent: Int, val acknowledged: Int
 class NearbyExchange(
     private val store: RoomStore,
     private val policy: NearbyPolicy = NearbyPolicy(),
+    /** Relays to publish received posts to when online; empty disables the bridge. */
+    private val bridgeTo: List<String> = emptyList(),
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private class ProtocolError(message: String) : Exception(message)
@@ -113,7 +115,7 @@ class NearbyExchange(
             event.createdAt > clock + policy.maxFutureSeconds -> "future timestamp"
             event.createdAt < clock - policy.maxAgeSeconds -> "too old"
             else -> try {
-                if (store.saveNearbyEvent(event, frame.hops + 1)) null else "store full"
+                if (store.saveNearbyEvent(event, frame.hops + 1, bridgeTo)) null else "store full"
             } catch (failure: IllegalArgumentException) {
                 if (failure.message == "This author is blocked") "blocked author" else "invalid event"
             } catch (_: IllegalStateException) {

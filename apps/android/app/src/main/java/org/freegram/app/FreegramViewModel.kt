@@ -64,6 +64,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyRunning by mutableStateOf(false); private set
     var nearbyStatus by mutableStateOf(""); private set
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
+    var autoBridge by mutableStateOf(store.autoBridge()); private set
     private var nearby: NearbySharing? = null
 
     // Status
@@ -231,6 +232,11 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     fun stopNearby() {
         nearby?.stop()
         nearbyRunning = false
+    }
+
+    fun changeAutoBridge(enabled: Boolean) {
+        store.setAutoBridge(enabled)
+        autoBridge = enabled
     }
 
     fun nearbyPermissionDenied() { nearbyStatus = "Nearby sharing needs Bluetooth and nearby-device permissions." }

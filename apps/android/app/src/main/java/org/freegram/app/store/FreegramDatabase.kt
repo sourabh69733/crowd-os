@@ -33,8 +33,8 @@ data class DraftRow(@PrimaryKey val slot: Int = 0, val content: String)
 @Entity(tableName = "author_policies")
 data class AuthorPolicyRow(@PrimaryKey val pubkey: String, val state: String)
 
-/** A stored bulletin with no unsettled relay delivery; `targets` is 0 for received posts. */
-data class EvictionCandidate(val id: String, val createdAt: Long, val wire: String, val targets: Int)
+/** A removable bulletin: settled outbox, or someone else's post (received, or carried from nearby even if still queued). */
+data class EvictionCandidate(val id: String, val createdAt: Long, val wire: String, val targets: Int, val hops: Int)
 
 @Dao
 interface BulletinDao {
@@ -52,8 +52,8 @@ interface BulletinDao {
     @Query("SELECT * FROM relay_deliveries WHERE state != 'Accepted' ORDER BY eventId, relay") suspend fun unsettledDeliveries(): List<RelayDeliveryRow>
     @Query("SELECT wire FROM bulletins WHERE id = :eventId") suspend fun wire(eventId: String): String?
     @Query(
-        "SELECT b.id, b.createdAt, b.wire, (SELECT COUNT(*) FROM relay_deliveries r WHERE r.eventId = b.id) AS targets " +
-            "FROM bulletins b WHERE NOT EXISTS (SELECT 1 FROM relay_deliveries r WHERE r.eventId = b.id AND r.state != 'Accepted') " +
+        "SELECT b.id, b.createdAt, b.wire, b.hops, (SELECT COUNT(*) FROM relay_deliveries r WHERE r.eventId = b.id) AS targets " +
+            "FROM bulletins b WHERE b.hops > 0 OR NOT EXISTS (SELECT 1 FROM relay_deliveries r WHERE r.eventId = b.id AND r.state != 'Accepted') " +
             "ORDER BY b.createdAt, b.id"
     ) suspend fun evictionCandidates(): List<EvictionCandidate>
     @Query("DELETE FROM relay_deliveries WHERE eventId = :eventId") suspend fun deleteDeliveries(eventId: String)
