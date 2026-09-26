@@ -15,6 +15,7 @@ import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.LaunchedEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
@@ -29,39 +30,62 @@ import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.relay.RelayClient
-import org.freegram.app.store.LocalStore
+import org.freegram.app.store.RoomStore
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { FreegramScreen(LocalStore(this), ProtectedIdentity(this), RelayClient()) }
+        val store = RoomStore(applicationContext)
+        val identity = ProtectedIdentity(applicationContext)
+        val relayClient = RelayClient()
+        setContent { FreegramScreen(store, identity, relayClient) }
     }
 }
 
 @Composable
-private fun FreegramScreen(store: LocalStore, identity: ProtectedIdentity, relayClient: RelayClient) {
-    var draft by remember { mutableStateOf(store.draft()) }
-    var event by remember { mutableStateOf(store.latestEvent()) }
+private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayClient: RelayClient) {
+    var draft by remember { mutableStateOf("") }
+    var event by remember { mutableStateOf<BulletinEvent?>(null) }
     var firstRelay by remember { mutableStateOf(store.relayUrl(0)) }
     var secondRelay by remember { mutableStateOf(store.relayUrl(1)) }
-    var firstState by remember(event) { mutableStateOf(event?.let { store.relayState(it.id, firstRelay) } ?: "") }
-    var secondState by remember(event) { mutableStateOf(event?.let { store.relayState(it.id, secondRelay) } ?: "") }
+    var firstState by remember { mutableStateOf("") }
+    var secondState by remember { mutableStateOf("") }
     var busy by remember { mutableStateOf(false) }
+    var ready by remember { mutableStateOf(false) }
     var error by remember { mutableStateOf("") }
     val scope = rememberCoroutineScope()
+
+    LaunchedEffect(store) {
+        try {
+            val restored = withContext(Dispatchers.IO) {
+                store.initialize()
+                store.draft() to store.latestEvent()
+            }
+            draft = restored.first
+            event = restored.second
+            restored.second?.let { saved ->
+                firstState = withContext(Dispatchers.IO) { store.relayState(saved.id, firstRelay) }
+                secondState = withContext(Dispatchers.IO) { store.relayState(saved.id, secondRelay) }
+            }
+            ready = true
+        } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
+    }
 
     suspend fun deliver(saved: BulletinEvent) {
         val relays = listOf(firstRelay.trim(), secondRelay.trim())
         require(relays.all { it.startsWith("wss://") } && relays.distinct().size == 2) { "Use two distinct wss:// relay URLs" }
         withContext(Dispatchers.IO) {
+            store.saveEvent(saved, relays)
             store.setRelayUrl(0, relays[0])
             store.setRelayUrl(1, relays[1])
         }
-        val first = withContext(Dispatchers.IO) { relayClient.publish(relays[0], saved) }
-        withContext(Dispatchers.IO) { store.setRelayState(saved.id, relays[0], first) }
+        val first = withContext(Dispatchers.IO) {
+            if (store.relayState(saved.id, relays[0]) == "Accepted") "Accepted" else relayClient.publish(relays[0], saved).also { store.setRelayState(saved.id, relays[0], it) }
+        }
         firstState = first
-        val second = withContext(Dispatchers.IO) { relayClient.publish(relays[1], saved) }
-        withContext(Dispatchers.IO) { store.setRelayState(saved.id, relays[1], second) }
+        val second = withContext(Dispatchers.IO) {
+            if (store.relayState(saved.id, relays[1]) == "Accepted") "Accepted" else relayClient.publish(relays[1], saved).also { store.setRelayState(saved.id, relays[1], it) }
+        }
         secondState = second
     }
 
@@ -75,12 +99,13 @@ private fun FreegramScreen(store: LocalStore, identity: ProtectedIdentity, relay
             OutlinedTextField(
                 value = draft,
                 onValueChange = { draft = it },
+                enabled = ready,
                 label = { Text("Bulletin draft") },
                 modifier = Modifier.fillMaxWidth(),
                 minLines = 4,
             )
             Text("${draft.toByteArray(Charsets.UTF_8).size}/2048 UTF-8 bytes")
-            Button(enabled = !busy, onClick = {
+            Button(enabled = ready && !busy, onClick = {
                 scope.launch {
                     try {
                         withContext(Dispatchers.IO) { store.saveDraft(draft) }
@@ -88,7 +113,7 @@ private fun FreegramScreen(store: LocalStore, identity: ProtectedIdentity, relay
                     } catch (failure: Exception) { error = failure.message ?: "Could not save draft" }
                 }
             }) { Text("Save draft") }
-            Button(enabled = !busy && draft.isNotBlank() && draft.toByteArray(Charsets.UTF_8).size <= 2048, onClick = {
+            Button(enabled = ready && !busy && draft.isNotBlank() && draft.toByteArray(Charsets.UTF_8).size <= 2048, onClick = {
                 scope.launch {
                     busy = true
                     error = ""
@@ -98,7 +123,7 @@ private fun FreegramScreen(store: LocalStore, identity: ProtectedIdentity, relay
                             val signed = identity.withSecret { secret ->
                                 Nip01Protocol.signBulletin(secret, draft, System.currentTimeMillis() / 1000)
                             }
-                            store.saveEvent(signed)
+                            store.saveEvent(signed, listOf(firstRelay.trim(), secondRelay.trim()))
                             store.saveDraft("")
                             signed
                         }
@@ -120,7 +145,7 @@ private fun FreegramScreen(store: LocalStore, identity: ProtectedIdentity, relay
                 Text("Event ID: ${saved.id}")
                 Text("Relay 1: $firstState")
                 Text("Relay 2: $secondState")
-                Button(enabled = !busy, onClick = {
+                Button(enabled = ready && !busy, onClick = {
                     scope.launch {
                         busy = true
                         error = ""
