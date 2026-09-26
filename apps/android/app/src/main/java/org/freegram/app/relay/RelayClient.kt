@@ -24,10 +24,16 @@ data class AuthorFetchResult(val events: List<BulletinEvent>, val status: String
 
 class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().connectTimeout(8, TimeUnit.SECONDS).build()) {
 
-    suspend fun fetchAuthors(relay: String, authors: List<String>, nowSeconds: Long = System.currentTimeMillis() / 1000): AuthorFetchResult {
+    suspend fun fetchAuthors(
+        relay: String,
+        authors: List<String>,
+        nowSeconds: Long = System.currentTimeMillis() / 1000,
+        since: Long? = null,
+        until: Long? = null,
+    ): AuthorFetchResult {
         require(relay.startsWith("wss://"))
         val subscription = "freegram-feed-${UUID.randomUUID()}"
-        val request = AuthorRelayFrames.request(subscription, authors)
+        val request = AuthorRelayFrames.request(subscription, authors, since, until)
         val requestedAuthors = authors.toSet()
         val events = LinkedHashMap<String, BulletinEvent>()
         val status = withTimeoutOrNull(12_000) {
@@ -51,7 +57,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                             is AuthorFrame.Verified -> {
                                 val reachedLimit = synchronized(events) {
                                     events.putIfAbsent(frame.event.id, frame.event)
-                                    events.size >= 50
+                                    events.size >= AuthorRelayFrames.LIMIT
                                 }
                                 if (reachedLimit) finish(webSocket, "Event limit reached")
                             }

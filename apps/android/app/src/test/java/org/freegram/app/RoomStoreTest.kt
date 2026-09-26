@@ -105,7 +105,7 @@ class RoomStoreTest {
         store.initialize()
         val oldAccepted = event(1_600_000_000).also { store.saveEvent(it, relayTargets); store.accept(it.id) }
         val waiting = event(1_600_000_001).also { store.saveEvent(it, relayTargets) }
-        val received = (0 until 98).map { signedBy(5, 1_700_000_000L + it).also { e -> store.saveReceivedEvent(e) } }
+        val received = (0 until 98).map { signedBy(10 + it % 10, 1_700_000_000L + it).also { e -> store.saveReceivedEvent(e) } }
         assertEquals(100, store.savedEvents().size)
 
         val newPost = event(1_800_000_000).also { store.saveEvent(it, relayTargets) }
@@ -121,7 +121,7 @@ class RoomStoreTest {
     @Test fun olderReceivedPostDoesNotPushOutNewerOnes() = runBlocking {
         val store = RoomStore(context, databaseName)
         store.initialize()
-        repeat(100) { store.saveReceivedEvent(signedBy(5, 1_700_000_000L + it)) }
+        repeat(100) { store.saveReceivedEvent(signedBy(10 + it % 10, 1_700_000_000L + it)) }
         val before = store.ids()
         val stale = signedBy(5, 1_600_000_000)
         assertFalse(store.saveReceivedEvent(stale))
@@ -129,6 +129,22 @@ class RoomStoreTest {
         assertTrue(store.saveReceivedEvent(signedBy(5, 1_700_000_200)))
         assertFalse(before.minus(store.ids()).isEmpty())
         assertEquals(100, store.ids().size)
+        store.close()
+    }
+
+    @Test fun oneAuthorKeepsAtMostTwentyReceivedPosts() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val own = (0 until 25).map { signedBy(3, 1_600_000_000L + it).also { e -> store.saveEvent(e, relayTargets); store.accept(e.id) } }
+        val flood = (0 until 20).map { signedBy(5, 1_700_000_000L + it).also { e -> assertTrue(store.saveReceivedEvent(e)) } }
+        val other = signedBy(6, 1_700_000_000).also { store.saveReceivedEvent(it) }
+
+        assertTrue(store.saveReceivedEvent(signedBy(5, 1_700_000_100)))
+        assertFalse(flood[0].id in store.ids())
+        assertFalse(store.saveReceivedEvent(signedBy(5, 1_600_000_000)))
+        assertEquals(20, store.savedEvents().count { it.pubkey == flood[0].pubkey })
+        assertTrue(own.all { it.id in store.ids() }) // posts this phone submitted are not capped
+        assertTrue(other.id in store.ids())
         store.close()
     }
 

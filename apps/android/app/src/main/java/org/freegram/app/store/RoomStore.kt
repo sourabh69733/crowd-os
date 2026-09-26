@@ -78,6 +78,15 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         require(Nip01Protocol.verifyBulletin(event))
         return database.withTransaction {
             require(dao.authorState(event.pubkey) != AuthorState.BLOCKED.name) { "This author is blocked" }
+            if (relays.isEmpty() && !dao.hasBulletin(event.id)) {
+                // One author's received posts may not crowd out everyone else's.
+                val oldestOfAuthor = evictionCandidates().filter { it.targets == 0 && it.pubkey == event.pubkey }
+                if (oldestOfAuthor.size >= MAX_PER_AUTHOR) {
+                    if (oldestOfAuthor.first().createdAt > event.createdAt) return@withTransaction false
+                    dao.deleteDeliveries(oldestOfAuthor.first().id)
+                    dao.deleteBulletin(oldestOfAuthor.first().id)
+                }
+            }
             if (dao.bulletinCount() >= MAX_BULLETINS && !dao.hasBulletin(event.id)) {
                 val victim = evictionVictim() ?: error("Local store is full of posts still waiting for relays")
                 if (relays.isEmpty() && victim.targets == 0 && !victim.blocked && victim.createdAt > event.createdAt) {
@@ -92,15 +101,20 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         }
     }
 
-    private data class Victim(val id: String, val createdAt: Long, val targets: Int, val blocked: Boolean)
+    private data class Victim(val id: String, val createdAt: Long, val targets: Int, val pubkey: String?, val blocked: Boolean)
+
+    /** Removable posts, oldest first. */
+    private suspend fun evictionCandidates(): List<Victim> {
+        val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        return dao.evictionCandidates().map { row ->
+            val pubkey = runCatching { Nip01Protocol.fromJson(row.wire).pubkey }.getOrNull()
+            Victim(row.id, row.createdAt, row.targets, pubkey, pubkey == null || pubkey in blocked)
+        }
+    }
 
     /** Blocked authors first, then the oldest received post, then the oldest fully accepted outbox post. */
     private suspend fun evictionVictim(): Victim? {
-        val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
-        val candidates = dao.evictionCandidates().map { row ->
-            val pubkey = runCatching { Nip01Protocol.fromJson(row.wire).pubkey }.getOrNull()
-            Victim(row.id, row.createdAt, row.targets, pubkey == null || pubkey in blocked)
-        }
+        val candidates = evictionCandidates()
         return candidates.firstOrNull { it.blocked }
             ?: candidates.firstOrNull { it.targets == 0 }
             ?: candidates.firstOrNull()
@@ -121,9 +135,14 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
             check(dao.authorState(pubkey) != null || dao.authorCount() < 20) { "Author list is full" }
             dao.setAuthorPolicy(AuthorPolicyRow(pubkey, state.name))
         }
+        // A changed author list must fetch the new author's history, not only newer posts.
+        clearFeedSince()
     }
 
-    suspend fun removeAuthor(pubkey: String) { dao.removeAuthorPolicy(pubkey) }
+    suspend fun removeAuthor(pubkey: String) {
+        dao.removeAuthorPolicy(pubkey)
+        clearFeedSince()
+    }
     suspend fun authorPolicies(): List<AuthorPolicy> = dao.authorPolicies().map { AuthorPolicy(it.pubkey, AuthorState.valueOf(it.state)) }
     suspend fun feedEvents(): List<BulletinEvent> {
         val followed = dao.authorPolicies().filter { it.state == AuthorState.FOLLOWING.name }.map { it.pubkey }.toSet()
@@ -151,6 +170,15 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
             event?.takeIf { it.createdAt >= notBeforeSeconds && Nip01Protocol.verifyBulletin(it) }?.let { it to rows.map { row -> row.relay } }
         }
 
+    /** Newest `created_at` seen by the last completed feed refresh from [relay], or null. */
+    fun feedSince(relay: String): Long? = prefs.getLong("feed_since:$relay", -1).takeIf { it >= 0 }
+    fun setFeedSince(relay: String, value: Long) { check(prefs.edit().putLong("feed_since:$relay", value).commit()) }
+    private fun clearFeedSince() {
+        val edit = prefs.edit()
+        prefs.all.keys.filter { it.startsWith("feed_since:") }.forEach(edit::remove)
+        check(edit.commit())
+    }
+
     fun relayUrl(index: Int): String = prefs.getString("relay_url_$index", if (index == 0) "wss://relay.damus.io" else "wss://nos.lol") ?: ""
     fun setRelayUrl(index: Int, url: String) {
         require(url.startsWith("wss://"))
@@ -161,6 +189,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     companion object {
         const val MAX_BULLETINS = 100
+        const val MAX_PER_AUTHOR = 20
 
         @Volatile private var shared: RoomStore? = null
 

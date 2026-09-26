@@ -198,7 +198,7 @@ class NearbyExchangeTest {
 
     @Test fun inventoryAndTransferAreBoundedPerExchange() {
         val a = phone(); val b = phone()
-        runBlocking { repeat(40) { a.saveReceivedEvent(post(3, "post $it", now - 1000 + it)) } }
+        runBlocking { repeat(40) { a.saveReceivedEvent(post(10 + it % 4, "post $it", now - 1000 + it)) } }
         val (first, _) = exchange(a, b)
         assertEquals(32, first.sent)
         val (second, _) = exchange(a, b)
@@ -206,7 +206,7 @@ class NearbyExchangeTest {
         runBlocking { assertEquals(40, b.savedEvents().size) }
 
         val big = phone()
-        runBlocking { repeat(100) { big.saveReceivedEvent(post(3, "many $it", now - 1000 + it)) } }
+        runBlocking { repeat(100) { big.saveReceivedEvent(post(10 + it % 10, "many $it", now - 1000 + it)) } }
         assertTrue(runBlocking { big.nearbyOffers(0, Long.MAX_VALUE, 6, NearbyFrames.MAX_HAVE) }.size <= NearbyFrames.MAX_HAVE)
         assertThrows(IllegalArgumentException::class.java) {
             NearbyFrames.parse(frame(NearbyFrame.Have(List(129) { "%064x".format(it) })))

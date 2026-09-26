@@ -13,7 +13,9 @@ sealed interface AuthorFrame {
 }
 
 object AuthorRelayFrames {
-    fun request(subscription: String, authors: List<String>): String {
+    const val LIMIT = 50
+
+    fun request(subscription: String, authors: List<String>, since: Long? = null, until: Long? = null): String {
         require(subscription.isNotEmpty() && subscription.length <= 64)
         require(authors.isNotEmpty() && authors.size <= 20 && authors.distinct().size == authors.size)
         require(authors.all { key -> key.length == 64 && key.all { it in '0'..'9' || it in 'a'..'f' } })
@@ -23,7 +25,8 @@ object AuthorRelayFrames {
             .put(JSONObject()
                 .put("authors", JSONArray(authors))
                 .put("kinds", JSONArray().put(1))
-                .put("limit", 50))
+                .put("limit", LIMIT)
+                .apply { since?.let { put("since", it) }; until?.let { put("until", it) } })
             .toString()
     }
 
