@@ -16,7 +16,7 @@ Status: draft for the public-bulletin pilot, 25 September 2026. It covers public
 |---|---|---|
 | Fake author or edited bulletin | Recompute NIP-01 ID and verify BIP-340 signature before storage/display | A stolen author key still signs valid forgeries. Users can back up (`nsec`), restore or replace a key, but Nostr cannot revoke the old one; followers must learn the new key out of band. |
 | False rumor or fake “organizer” claim | Never equate valid signature with factual truth; trusted source keys must be verified out of band; report/block UI | Users may still trust a misleading alias or copied screenshot. |
-| Flooding by many keys (Sybil) | Per-peer/device resource budgets, bounded event size/inventory, no automatic ranking | Open identity permits cheap new keys; moderation and relay policy remain necessary. |
+| Flooding by many keys (Sybil) | Per-peer/device resource budgets, bounded event size/inventory, 20 stored posts per author, no automatic ranking | Open identity permits cheap new keys; moderation and relay policy remain necessary. |
 | Replay and duplicate spread | Event-ID deduplication; local age and forwarding caps; bounded storage | A noncompliant peer can resend or republish public data elsewhere. |
 | Radio tracking and presence | Minimal advertised data, explicit nearby mode, measured discovery behavior | Nearby peers or observers can infer physical proximity; rotating identifiers cannot guarantee anonymity. |
 | Inventory disclosure | Small exchange inventory; share only eligible public event IDs | A peer learns what the phone holds; stronger private set reconciliation is deferred. |
