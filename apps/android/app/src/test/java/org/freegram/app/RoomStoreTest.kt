@@ -95,4 +95,17 @@ class RoomStoreTest {
         } catch (_: IllegalStateException) { }
         store.close()
     }
+
+    @Test fun fetchedEventIsNotQueuedUntilUserChoosesToCarryIt() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val signed = event()
+        store.saveReceivedEvent(signed)
+        assertEquals(signed, store.latestEvent())
+        assertTrue(store.deliveryTargets(signed.id).isEmpty())
+        val relays = listOf("wss://one.example", "wss://two.example")
+        store.saveEvent(signed, relays)
+        assertEquals(relays, store.deliveryTargets(signed.id))
+        store.close()
+    }
 }

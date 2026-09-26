@@ -37,6 +37,7 @@ interface BulletinDao {
     @Query("SELECT content FROM drafts WHERE slot = 0") suspend fun draft(): String?
     @Query("SELECT state FROM relay_deliveries WHERE eventId = :eventId AND relay = :relay") suspend fun relayState(eventId: String, relay: String): String?
     @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId AND state != 'Accepted' ORDER BY relay") suspend fun pendingRelays(eventId: String): List<String>
+    @Query("SELECT relay FROM relay_deliveries WHERE eventId = :eventId ORDER BY relay") suspend fun deliveryTargets(eventId: String): List<String>
 }
 
 @Database(entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class], version = 1, exportSchema = true)

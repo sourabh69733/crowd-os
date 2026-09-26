@@ -45,8 +45,14 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     suspend fun saveDraft(value: String) { dao.setDraft(DraftRow(content = value)) }
 
     suspend fun saveEvent(event: BulletinEvent, relays: List<String>) {
-        require(Nip01Protocol.verifyBulletin(event))
         require(relays.size == 2 && relays.distinct().size == 2 && relays.all { it.startsWith("wss://") })
+        saveVerified(event, relays)
+    }
+
+    suspend fun saveReceivedEvent(event: BulletinEvent) = saveVerified(event, emptyList())
+
+    private suspend fun saveVerified(event: BulletinEvent, relays: List<String>) {
+        require(Nip01Protocol.verifyBulletin(event))
         database.withTransaction {
             if (dao.bulletinCount() >= 100 && !dao.hasBulletin(event.id)) {
                 error("Local outbox is full")
@@ -58,6 +64,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     suspend fun latestEvent(): BulletinEvent? = dao.latestWire()?.let(Nip01Protocol::fromJson)?.takeIf(Nip01Protocol::verifyBulletin)
     suspend fun relayState(eventId: String, relay: String): String = dao.relayState(eventId, relay) ?: "Pending"
+    suspend fun deliveryTargets(eventId: String): List<String> = dao.deliveryTargets(eventId)
     suspend fun pendingRelayTargets(eventId: String): List<String> = dao.pendingRelays(eventId)
     suspend fun setRelayState(eventId: String, relay: String, state: String) {
         require(state == "Accepted" || state == "Pending" || state == "Timed out" || state == "Network error" || state.startsWith("Rejected:"))
