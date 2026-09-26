@@ -4,7 +4,7 @@ This directory contains the first buildable Android prototype. Phase 0 defines i
 
 Build with `ANDROID_HOME=<Android SDK path> ./gradlew :app:testDebugUnitTest :app:assembleDebug`. The debug APK is at `app/build/outputs/apk/debug/app-debug.apk`.
 
-Current slice: Kotlin/Compose, NIP-01 kind-1 text events, ACINQ secp256k1-kmp 0.24.0 for BIP-340, Android Keystore AES wrapping for an exportable Nostr secret, local draft/outbox, and WebSocket relay `OK` status. The user can configure two `wss://` relays. Signing and local persistence happen before network attempts. A saved event can be retried after restart.
+Current slice: Kotlin/Compose, NIP-01 kind-1 text events, ACINQ secp256k1-kmp 0.24.0 for BIP-340, Android Keystore AES wrapping for an exportable Nostr secret, local draft/outbox, and WebSocket relay `OK` status. The user can configure two `wss://` relays. Signing and local persistence happen before network attempts. Temporary relay failures are retried automatically, in the app and by a background job when the phone is online; a saved event can also be retried manually.
 
 For the relay bridge test, A can copy its signed public JSON, B can paste and verify that JSON before explicitly submitting it, and C can fetch the event ID from relay 1 or relay 2. Copy/paste uses a transfer method outside Freegram; it does not test offline peer transport. Follow [the three-phone procedure](../../docs/freegram/RELAY_BRIDGE_TEST.md).
 
