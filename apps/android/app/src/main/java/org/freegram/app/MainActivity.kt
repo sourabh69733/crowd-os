@@ -31,11 +31,16 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.freegram.app.identity.ProtectedIdentity
+import org.freegram.app.feed.FollowedFeedSection
+import org.freegram.app.feed.FollowedFeedSync
+import org.freegram.app.feed.RelayRefreshResult
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.relay.RelayClient
 import org.freegram.app.relay.FetchResult
 import org.freegram.app.store.RoomStore
+import org.freegram.app.store.AuthorPolicy
+import org.freegram.app.store.AuthorState
 
 class MainActivity : ComponentActivity() {
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -52,6 +57,11 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
     var draft by remember { mutableStateOf("") }
     var event by remember { mutableStateOf<BulletinEvent?>(null) }
     var savedEvents by remember { mutableStateOf<List<BulletinEvent>>(emptyList()) }
+    var feedEvents by remember { mutableStateOf<List<BulletinEvent>>(emptyList()) }
+    var authorPolicies by remember { mutableStateOf<List<AuthorPolicy>>(emptyList()) }
+    var authorInput by remember { mutableStateOf("") }
+    var feedMessage by remember { mutableStateOf("") }
+    var feedRelayResults by remember { mutableStateOf<List<RelayRefreshResult>>(emptyList()) }
     var canDeliver by remember { mutableStateOf(false) }
     var importWire by remember { mutableStateOf("") }
     var lookupId by remember { mutableStateOf("") }
@@ -66,7 +76,13 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
     val context = LocalContext.current
 
     suspend fun refreshSavedEvents() {
-        savedEvents = withContext(Dispatchers.IO) { store.savedEvents() }
+        val (saved, feed) = withContext(Dispatchers.IO) { store.savedEvents() to store.feedEvents() }
+        savedEvents = saved
+        feedEvents = feed
+    }
+
+    suspend fun refreshAuthorPolicies() {
+        authorPolicies = withContext(Dispatchers.IO) { store.authorPolicies() }
     }
 
     suspend fun showEvent(saved: BulletinEvent) {
@@ -91,6 +107,8 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             }
             draft = restored.first
             savedEvents = restored.second
+            refreshAuthorPolicies()
+            feedEvents = withContext(Dispatchers.IO) { store.feedEvents() }
             restored.second.firstOrNull()?.let { showEvent(it) }
             ready = true
         } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
@@ -207,6 +225,73 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     }) { Text("Submit saved event to relays") }
                 }
             }
+            FollowedFeedSection(
+                authorInput = authorInput,
+                onAuthorInputChange = { authorInput = it },
+                policies = authorPolicies,
+                events = feedEvents,
+                relayResults = feedRelayResults,
+                message = feedMessage,
+                enabled = ready && !busy,
+                onFollow = {
+                    scope.launch {
+                        busy = true
+                        try {
+                            withContext(Dispatchers.IO) { store.setAuthorState(authorInput.trim().lowercase(), AuthorState.FOLLOWING) }
+                            authorInput = ""
+                            refreshAuthorPolicies()
+                            refreshSavedEvents()
+                            feedMessage = "Following key. Refresh to fetch its posts."
+                        } catch (failure: Exception) { feedMessage = failure.message ?: "Could not follow key" }
+                        finally { busy = false }
+                    }
+                },
+                onChangeState = { pubkey, state ->
+                    scope.launch {
+                        busy = true
+                        try {
+                            withContext(Dispatchers.IO) { store.setAuthorState(pubkey, state) }
+                            if (state == AuthorState.BLOCKED && event?.pubkey == pubkey) event = null
+                            refreshAuthorPolicies()
+                            refreshSavedEvents()
+                            feedMessage = "Author ${state.name.lowercase()} locally"
+                        } catch (failure: Exception) { feedMessage = failure.message ?: "Could not update author" }
+                        finally { busy = false }
+                    }
+                },
+                onRemove = { pubkey ->
+                    scope.launch {
+                        busy = true
+                        try {
+                            withContext(Dispatchers.IO) { store.removeAuthor(pubkey) }
+                            refreshAuthorPolicies()
+                            refreshSavedEvents()
+                            feedMessage = "Local author control removed"
+                        } catch (failure: Exception) { feedMessage = failure.message ?: "Could not remove author" }
+                        finally { busy = false }
+                    }
+                },
+                onRefresh = {
+                    scope.launch {
+                        busy = true
+                        feedMessage = "Refreshing…"
+                        try {
+                            feedRelayResults = withContext(Dispatchers.IO) {
+                                FollowedFeedSync(store, relayClient).refresh(listOf(firstRelay.trim(), secondRelay.trim()))
+                            }
+                            refreshSavedEvents()
+                            feedMessage = "Refresh finished. Check each relay result below."
+                        } catch (failure: Exception) { feedMessage = failure.message ?: "Refresh failed" }
+                        finally { busy = false }
+                    }
+                },
+                onOpen = { saved ->
+                    scope.launch {
+                        try { showEvent(saved) }
+                        catch (failure: Exception) { feedMessage = failure.message ?: "Could not open post" }
+                    }
+                },
+            )
             Text("Bridge test", style = MaterialTheme.typography.titleMedium)
             Text("Only paste a signed event copied from another phone here. For a new plain-text post, use Bulletin draft above.")
             OutlinedTextField(
