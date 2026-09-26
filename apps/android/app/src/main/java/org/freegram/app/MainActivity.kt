@@ -51,6 +51,7 @@ class MainActivity : ComponentActivity() {
 private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayClient: RelayClient) {
     var draft by remember { mutableStateOf("") }
     var event by remember { mutableStateOf<BulletinEvent?>(null) }
+    var savedEvents by remember { mutableStateOf<List<BulletinEvent>>(emptyList()) }
     var canDeliver by remember { mutableStateOf(false) }
     var importWire by remember { mutableStateOf("") }
     var lookupId by remember { mutableStateOf("") }
@@ -64,19 +65,33 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
     val scope = rememberCoroutineScope()
     val context = LocalContext.current
 
+    suspend fun refreshSavedEvents() {
+        savedEvents = withContext(Dispatchers.IO) { store.savedEvents() }
+    }
+
+    suspend fun showEvent(saved: BulletinEvent) {
+        val details = withContext(Dispatchers.IO) {
+            Triple(
+                store.deliveryTargets(saved.id).isNotEmpty(),
+                store.relayState(saved.id, firstRelay.trim()),
+                store.relayState(saved.id, secondRelay.trim()),
+            )
+        }
+        event = saved
+        canDeliver = details.first
+        firstState = details.second
+        secondState = details.third
+    }
+
     LaunchedEffect(store) {
         try {
             val restored = withContext(Dispatchers.IO) {
                 store.initialize()
-                store.draft() to store.latestEvent()
+                store.draft() to store.savedEvents()
             }
             draft = restored.first
-            event = restored.second
-            restored.second?.let { saved ->
-                firstState = withContext(Dispatchers.IO) { store.relayState(saved.id, firstRelay) }
-                secondState = withContext(Dispatchers.IO) { store.relayState(saved.id, secondRelay) }
-                canDeliver = withContext(Dispatchers.IO) { store.deliveryTargets(saved.id).isNotEmpty() }
-            }
+            savedEvents = restored.second
+            restored.second.firstOrNull()?.let { showEvent(it) }
             ready = true
         } catch (failure: Exception) { error = failure.message ?: "Could not open local data" }
     }
@@ -105,10 +120,8 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
         when (result) {
             is FetchResult.Found -> {
                 withContext(Dispatchers.IO) { store.saveReceivedEvent(result.event) }
-                event = result.event
-                canDeliver = withContext(Dispatchers.IO) { store.deliveryTargets(result.event.id).isNotEmpty() }
-                firstState = withContext(Dispatchers.IO) { store.relayState(result.event.id, firstRelay.trim()) }
-                secondState = withContext(Dispatchers.IO) { store.relayState(result.event.id, secondRelay.trim()) }
+                refreshSavedEvents()
+                showEvent(result.event)
                 error = "Fetched and verified ${result.event.id.take(12)}… from $relay"
             }
             FetchResult.NotFound -> error = "Relay has no stored event for that ID"
@@ -154,11 +167,9 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                             store.saveDraft("")
                             signed
                         }
-                        event = saved
-                        canDeliver = true
+                        refreshSavedEvents()
+                        showEvent(saved)
                         draft = ""
-                        firstState = "Pending"
-                        secondState = "Pending"
                         deliver(saved)
                     } catch (failure: Exception) { error = failure.message ?: "Publish failed; check saved event" }
                     finally { busy = false }
@@ -168,13 +179,17 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
             OutlinedTextField(value = secondRelay, onValueChange = { secondRelay = it }, label = { Text("Relay 2") }, modifier = Modifier.fillMaxWidth())
             if (error.isNotEmpty()) Text(error)
             event?.let { saved ->
-                Text("Latest saved bulletin", style = MaterialTheme.typography.titleMedium)
+                Text("Selected saved bulletin", style = MaterialTheme.typography.titleMedium)
                 Text(saved.content)
                 Text("Signature valid. Author identity and report accuracy are not verified.")
                 Text("Author key: ${saved.pubkey}")
                 Text("Event ID: ${saved.id}")
-                Text("Relay 1: $firstState")
-                Text("Relay 2: $secondState")
+                if (canDeliver) {
+                    Text("Relay 1: $firstState")
+                    Text("Relay 2: $secondState")
+                } else {
+                    Text("Verified locally; this phone has not queued relay delivery.")
+                }
                 Button(onClick = {
                     val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
                     clipboard.setPrimaryClip(ClipData.newPlainText("Freegram signed event", Nip01Protocol.toJson(saved)))
@@ -209,10 +224,8 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     try {
                         val imported = Nip01Protocol.parseImportedBulletin(importWire)
                         withContext(Dispatchers.IO) { store.saveEvent(imported, listOf(firstRelay.trim(), secondRelay.trim())) }
-                        event = imported
-                        canDeliver = true
-                        firstState = withContext(Dispatchers.IO) { store.relayState(imported.id, firstRelay.trim()) }
-                        secondState = withContext(Dispatchers.IO) { store.relayState(imported.id, secondRelay.trim()) }
+                        refreshSavedEvents()
+                        showEvent(imported)
                         importWire = ""
                         error = "Verified and saved for explicit relay submission"
                     } catch (failure: Exception) { error = failure.message ?: "Import failed" }
@@ -244,6 +257,19 @@ private fun FreegramScreen(store: RoomStore, identity: ProtectedIdentity, relayC
                     finally { busy = false }
                 }
             }) { Text("Fetch from relay 2") }
+            Text("Saved bulletins on this phone", style = MaterialTheme.typography.titleMedium)
+            Text("Verified local copies only. New posts are not discovered automatically yet.")
+            if (savedEvents.isEmpty()) Text("No saved bulletins yet")
+            savedEvents.forEach { saved ->
+                Text(saved.content.take(160))
+                Text("Author key: ${saved.pubkey.take(16)}…")
+                Button(enabled = ready && !busy, onClick = {
+                    scope.launch {
+                        try { showEvent(saved) }
+                        catch (failure: Exception) { error = failure.message ?: "Could not open saved bulletin" }
+                    }
+                }) { Text("Open ${saved.id.take(12)}…") }
+            }
         }
     }
 }
