@@ -16,7 +16,8 @@ Updated 26 September 2026. This is a developer prototype, not a field pilot or a
 
 - A throwaway BIP-340 key produced the exact official vector-0 signature with an independent `coincurve` probe.
 - A 25 September probe to `wss://relay.damus.io` and `wss://nos.lol` stopped at HTTP 503/502 handshakes. On 26 September, the same independent-client probe succeeded: both relays returned `OK true` for throwaway event `d89115c8d9e8645fb771f81f32ba0777234391aa54664b9b9d713c49ceffa46d`, and a separate connection fetched it from each. The relays' [Damus](https://relay.damus.io/) and [nos.lol](https://nos.lol/) NIP-11 responses report different names and public keys. This verifies current acceptance and retrieval of a carrier-submitted event from this computer; it does not prove operator independence, retention, phone behavior or offline delivery.
-- No Android phone is attached. The APK has not been installed or exercised on hardware. Nearby A → B → C, carrier bridging, battery, Google Play services dependency and background behavior remain untested.
+- On 26 September, a `CPH2569` Android phone ran the debug app. For one harmless signed bulletin, its UI showed `Accepted` from both configured relays. Fetching the same event ID through the app succeeded from `wss://nos.lol`; the first `wss://relay.damus.io` fetch returned `Network error`, then a retry fetched and verified the event. After force-stop and restart, the same event ID and both `Accepted` states were visible. This is one phone and one event, not a cross-device or reliability result. The exact cause of the transient network error is unknown.
+- No second physical Android phone or configured emulator is available yet. Nearby A → B → C, carrier bridging on devices, battery, Google Play services dependency and background behavior remain untested.
 
 ## Next acceptance gate
 
