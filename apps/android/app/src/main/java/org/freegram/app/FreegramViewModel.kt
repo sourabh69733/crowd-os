@@ -12,6 +12,9 @@ import kotlinx.coroutines.withContext
 import org.freegram.app.feed.FollowedFeedSync
 import org.freegram.app.feed.RelayRefreshResult
 import org.freegram.app.identity.ProtectedIdentity
+import org.freegram.app.nearby.ExchangeReport
+import org.freegram.app.nearby.NearbySharing
+import org.freegram.app.nearby.hasPlayServices
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.Nip19
@@ -56,6 +59,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var revealedBackup by mutableStateOf<String?>(null); private set
     var confirmingRestore by mutableStateOf(false); private set
     var confirmingReplace by mutableStateOf(false); private set
+
+    // Nearby
+    var nearbyRunning by mutableStateOf(false); private set
+    var nearbyStatus by mutableStateOf(""); private set
+    var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
+    private var nearby: NearbySharing? = null
 
     // Status
     var ready by mutableStateOf(false); private set
@@ -200,6 +209,33 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun cancelConfirm() { confirmingRestore = false; confirmingReplace = false }
+
+    fun startNearby() {
+        if (!hasPlayServices(getApplication())) {
+            nearbyStatus = "Nearby sharing needs Google Play services, which this phone does not have."
+            return
+        }
+        val sharing = nearby ?: NearbySharing(getApplication(), store, viewModelScope, object : NearbySharing.Listener {
+            override fun onStatus(text: String) { nearbyStatus = text }
+            override fun onExchange(peer: String, report: ExchangeReport) {
+                val line = "$peer: ${report.outcome}. Received ${report.received}, rejected ${report.rejected}; " +
+                    "sent ${report.sent}, ${report.acknowledged} confirmed stored by that phone."
+                nearbyLog = (listOf(line) + nearbyLog).take(10)
+                viewModelScope.launch { refreshLists() }
+            }
+        }).also { nearby = it }
+        sharing.start()
+        nearbyRunning = true
+    }
+
+    fun stopNearby() {
+        nearby?.stop()
+        nearbyRunning = false
+    }
+
+    fun nearbyPermissionDenied() { nearbyStatus = "Nearby sharing needs Bluetooth and nearby-device permissions." }
+
+    override fun onCleared() { nearby?.stop() }
 
     private suspend fun deliver(event: BulletinEvent) {
         val targets = relays

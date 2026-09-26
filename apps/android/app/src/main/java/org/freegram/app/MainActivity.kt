@@ -24,6 +24,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.freegram.app.feed.FollowedFeedSection
 import org.freegram.app.identity.IdentitySection
+import org.freegram.app.nearby.NearbySection
 import org.freegram.app.protocol.Nip01Protocol
 
 class MainActivity : ComponentActivity() {
@@ -47,7 +48,7 @@ private fun FreegramScreen(model: FreegramViewModel) {
             verticalArrangement = Arrangement.spacedBy(12.dp),
         ) {
             Text("Freegram prototype", style = MaterialTheme.typography.headlineMedium)
-            Text("Public text bulletins. Anyone who gets a signed post can copy it. This prototype has no nearby transport; do not rely on it for safety-critical communication.")
+            Text("Public text bulletins. Anyone who gets a signed post can copy it. Nearby sharing is experimental and not yet tested between real phones; do not rely on this prototype for safety-critical communication.")
             OutlinedTextField(
                 value = model.draft,
                 onValueChange = { model.draft = it },
@@ -98,6 +99,15 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 onRemove = { model.removeAuthor(it) },
                 onRefresh = { model.refreshFeed() },
                 onOpen = { model.open(it) },
+            )
+            NearbySection(
+                running = model.nearbyRunning,
+                status = model.nearbyStatus,
+                log = model.nearbyLog,
+                enabled = model.ready,
+                onStart = model::startNearby,
+                onStop = model::stopNearby,
+                onPermissionDenied = model::nearbyPermissionDenied,
             )
             Text("Bridge test", style = MaterialTheme.typography.titleMedium)
             Text("Only paste a signed event copied from another phone here. For a new plain-text post, use Bulletin draft above.")

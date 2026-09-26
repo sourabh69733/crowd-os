@@ -46,6 +46,7 @@ dependencies {
     implementation("androidx.room:room-runtime:2.8.5")
     implementation("androidx.room:room-ktx:2.8.5")
     implementation("androidx.work:work-runtime-ktx:2.10.5")
+    implementation("com.google.android.gms:play-services-nearby:19.3.0")
     ksp("androidx.room:room-compiler:2.8.5")
 
     testImplementation("junit:junit:4.13.2")
