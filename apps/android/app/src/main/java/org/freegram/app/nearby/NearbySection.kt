@@ -26,11 +26,11 @@ fun NearbySection(
     onPermissionDenied: () -> Unit,
 ) {
     val launcher = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
-        if (granted.values.all { it }) onStart() else onPermissionDenied()
+        if (nearbyPermissions().all { granted[it] == true }) onStart() else onPermissionDenied()
     }
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Share nearby (experimental)", style = MaterialTheme.typography.titleMedium)
-        Text("Swaps recent public posts with nearby Freegram phones over Bluetooth and Wi-Fi, without internet. Works only while this screen is open. Nearby phones can see that a Freegram phone is here and which public posts it holds. Posts older than 48 hours or passed through 6 phones are not shared.")
+        Text("Swaps recent public posts with nearby Freegram phones over Bluetooth and Wi-Fi, without internet. Keeps running in the background under a notification until you stop it or 2 hours pass. Nearby phones can see that a Freegram phone is here and which public posts it holds. Posts older than 48 hours or passed through 6 phones are not shared.")
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             Switch(checked = autoBridge, onCheckedChange = onAutoBridgeChange)
             Text("Publish posts received nearby to the relays when online")
@@ -38,7 +38,7 @@ fun NearbySection(
         Text("Relays and your network will see this phone's internet address uploading other people's posts. Publishing does not change a post or make you its author.")
         if (status.isNotEmpty()) Text(status)
         if (running) Button(onClick = onStop) { Text("Stop sharing nearby") }
-        else Button(enabled = enabled, onClick = { launcher.launch(nearbyPermissions()) }) { Text("Start sharing nearby") }
+        else Button(enabled = enabled, onClick = { launcher.launch(nearbyPermissions() + optionalNearbyPermissions()) }) { Text("Start sharing nearby") }
         log.forEach { Text(it) }
     }
 }

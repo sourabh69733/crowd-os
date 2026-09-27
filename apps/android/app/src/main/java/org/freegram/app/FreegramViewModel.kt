@@ -15,7 +15,6 @@ import android.graphics.BitmapFactory
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
-import java.io.File
 import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.media.EncodedPhoto
 import org.freegram.app.moderation.HideList
@@ -23,8 +22,8 @@ import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
 import org.freegram.app.protocol.PhotoRef
-import org.freegram.app.nearby.ExchangeReport
-import org.freegram.app.nearby.NearbySharing
+import org.freegram.app.nearby.NearbyService
+import org.freegram.app.nearby.NearbyState
 import org.freegram.app.nearby.hasPlayServices
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
@@ -43,7 +42,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private val store = RoomStore.shared(application)
     private val identity = ProtectedIdentity(application)
     private val relayClient = RelayClient()
-    private val media = MediaStore(File(application.filesDir, "media"))
+    private val media = MediaStore.shared(application)
 
     // Inputs
     var draft by mutableStateOf("")
@@ -84,7 +83,6 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyStatus by mutableStateOf(""); private set
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
     var autoBridge by mutableStateOf(store.autoBridge()); private set
-    private var nearby: NearbySharing? = null
 
     // Moderation
     var maintainers by mutableStateOf<List<Maintainer>>(emptyList()); private set
@@ -103,6 +101,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private val relays get() = listOf(firstRelay.trim(), secondRelay.trim())
 
     init {
+        observeNearby()
         viewModelScope.launch {
             try {
                 val (restoredDraft, saved) = io { store.initialize(); store.draft() to store.savedEvents() }
@@ -343,23 +342,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             nearbyStatus = "Nearby sharing needs Google Play services, which this phone does not have."
             return
         }
-        val sharing = nearby ?: NearbySharing(getApplication(), store, media, viewModelScope, object : NearbySharing.Listener {
-            override fun onStatus(text: String) { nearbyStatus = text }
-            override fun onExchange(peer: String, report: ExchangeReport) {
-                val line = "$peer: ${report.outcome}. Received ${report.received} posts and ${report.photosReceived} photos, " +
-                    "rejected ${report.rejected}; sent ${report.sent} posts (${report.acknowledged} confirmed stored) and ${report.photosSent} photos."
-                nearbyLog = (listOf(line) + nearbyLog).take(10)
-                viewModelScope.launch { refreshLists(); selected?.let { show(it) } }
-            }
-        }).also { nearby = it }
-        sharing.start()
-        nearbyRunning = true
+        NearbyService.start(getApplication())
     }
 
-    fun stopNearby() {
-        nearby?.stop()
-        nearbyRunning = false
-    }
+    fun stopNearby() = NearbyService.stop(getApplication())
 
     fun changeAutoBridge(enabled: Boolean) {
         store.setAutoBridge(enabled)
@@ -368,7 +354,14 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     fun nearbyPermissionDenied() { nearbyStatus = "Nearby sharing needs Bluetooth and nearby-device permissions." }
 
-    override fun onCleared() { nearby?.stop() }
+    private fun observeNearby() {
+        viewModelScope.launch { NearbyState.running.collect { nearbyRunning = it } }
+        viewModelScope.launch { NearbyState.status.collect { nearbyStatus = it } }
+        viewModelScope.launch { NearbyState.log.collect { nearbyLog = it } }
+        viewModelScope.launch {
+            NearbyState.exchanges.collect { if (ready) { refreshLists(); selected?.let { show(it) } } }
+        }
+    }
 
     private suspend fun deliver(event: BulletinEvent) {
         val targets = relays

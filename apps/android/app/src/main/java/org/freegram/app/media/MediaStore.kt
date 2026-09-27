@@ -58,4 +58,13 @@ class MediaStore(private val dir: File, private val maxTotalBytes: Long = 50L * 
         }
         check(total + needed <= maxTotalBytes) { "Photo storage is full" }
     }
+
+    companion object {
+        @Volatile private var shared: MediaStore? = null
+
+        /** One instance per process, shared by the screen and the nearby service. */
+        fun shared(context: android.content.Context): MediaStore = shared ?: synchronized(this) {
+            shared ?: MediaStore(File(context.applicationContext.filesDir, "media")).also { shared = it }
+        }
+    }
 }

@@ -19,7 +19,7 @@ P2 follows P1's `npub`, refreshes, and must show P1's posts verified. Then P1 po
 3. Both open Freegram and tap **Start sharing nearby**.
 4. P2's log must show `received 1`; P1's must show `1 confirmed stored`. P2 opens the post: same event ID, signature valid.
 
-Repeat at least 10 times at 1 m, 10 m and through a wall. Record discovery time and failures.
+Repeat at least 10 times at 1 m, 10 m and through a wall. Record discovery time and failures. Then repeat with both screens off and the phones in pockets (sharing runs in the background), and note battery drop over 30 minutes.
 
 ## 4. Nearby, two hops without a third phone (A → B → C)
 

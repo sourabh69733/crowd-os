@@ -42,6 +42,10 @@ fun nearbyPermissions(): Array<String> = buildList {
     if (Build.VERSION.SDK_INT <= 32) add(Manifest.permission.ACCESS_FINE_LOCATION)
 }.toTypedArray()
 
+/** Asked for with [nearbyPermissions]; sharing works without it, but the ongoing notification stays hidden. */
+fun optionalNearbyPermissions(): Array<String> =
+    if (Build.VERSION.SDK_INT >= 33) arrayOf(Manifest.permission.POST_NOTIFICATIONS) else emptyArray()
+
 fun hasPlayServices(context: Context): Boolean =
     GoogleApiAvailability.getInstance().isGooglePlayServicesAvailable(context) == ConnectionResult.SUCCESS
 
