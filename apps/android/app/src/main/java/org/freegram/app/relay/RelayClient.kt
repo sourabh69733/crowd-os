@@ -8,6 +8,7 @@ import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
 import org.freegram.app.moderation.HideList
+import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.protocol.BulletinEvent
 import org.json.JSONObject
 import org.freegram.app.protocol.Nip01Protocol
@@ -85,13 +86,30 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
 
     /** Newest hide list per maintainer from [relay]; each is signature-checked before it is returned. */
     suspend fun fetchHideLists(relay: String, maintainers: List<String>): AuthorFetchResult {
-        require(relay.startsWith("wss://") && maintainers.isNotEmpty())
-        val subscription = "freegram-mod-${UUID.randomUUID()}"
-        val request = JSONArray().put("REQ").put(subscription).put(
-            JSONObject().put("kinds", JSONArray().put(HideList.KIND)).put("authors", JSONArray(maintainers)).put("limit", maintainers.size)
-        ).toString()
+        require(maintainers.isNotEmpty())
         val wanted = maintainers.toSet()
-        val lists = mutableListOf<BulletinEvent>()
+        val filter = JSONObject().put("kinds", JSONArray().put(HideList.KIND)).put("authors", JSONArray(maintainers)).put("limit", maintainers.size)
+        return fetchSigned(relay, filter, HideList.MAX_BYTES, maintainers.size * 4) { it.pubkey in wanted && HideList.of(it) != null }
+    }
+
+    /** Gift-wrapped private messages addressed to [recipient]; only the outer signature is checked here. */
+    suspend fun fetchWraps(relay: String, recipient: String, limit: Int = 100): AuthorFetchResult {
+        val filter = JSONObject().put("kinds", JSONArray().put(PrivateMessages.WRAP_KIND))
+            .put("#p", JSONArray().put(recipient)).put("limit", limit)
+        return fetchSigned(relay, filter, PrivateMessages.MAX_WRAP_BYTES, limit) { it.kind == PrivateMessages.WRAP_KIND }
+    }
+
+    private suspend fun fetchSigned(
+        relay: String,
+        filter: JSONObject,
+        maxBytes: Int,
+        maxEvents: Int,
+        accept: (BulletinEvent) -> Boolean,
+    ): AuthorFetchResult {
+        require(relay.startsWith("wss://"))
+        val subscription = "freegram-${UUID.randomUUID()}"
+        val request = JSONArray().put("REQ").put(subscription).put(filter).toString()
+        val events = mutableListOf<BulletinEvent>()
         val status = withTimeoutOrNull(12_000) {
             suspendCancellableCoroutine<String> { continuation ->
                 val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {
@@ -101,7 +119,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                     }
                     override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(request) }
                     override fun onMessage(webSocket: WebSocket, text: String) {
-                        if (text.length > HideList.MAX_BYTES + 1024) return
+                        if (text.length > maxBytes + 1024) return
                         try {
                             val message = JSONArray(text)
                             if (message.optString(1) != subscription) return
@@ -109,9 +127,10 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                                 "EOSE" -> finish(webSocket, "Complete")
                                 "CLOSED" -> finish(webSocket, "Relay closed: ${message.optString(2).take(120)}")
                                 "EVENT" -> {
-                                    val event = Nip01Protocol.fromJson(message.getJSONObject(2).toString(), HideList.MAX_BYTES)
-                                    if (event.pubkey in wanted && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES) && HideList.of(event) != null) {
-                                        synchronized(lists) { if (lists.size < maintainers.size * 4) lists += event }
+                                    val event = Nip01Protocol.fromJson(message.getJSONObject(2).toString(), maxBytes)
+                                    if (Nip01Protocol.verifySigned(event, maxBytes) && accept(event)) {
+                                        val full = synchronized(events) { if (events.size < maxEvents) events += event; events.size >= maxEvents }
+                                        if (full) finish(webSocket, "Event limit reached")
                                     }
                                 }
                             }
@@ -124,12 +143,16 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                 continuation.invokeOnCancellation { socket.cancel() }
             }
         } ?: "Timed out"
-        return AuthorFetchResult(synchronized(lists) { lists.toList() }, status)
+        return AuthorFetchResult(synchronized(events) { events.toList() }, status)
     }
 
     suspend fun publish(relay: String, event: BulletinEvent): String {
         require(relay.startsWith("wss://"))
-        require(Nip01Protocol.verifyBulletin(event) || (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)))
+        require(
+            Nip01Protocol.verifyBulletin(event) ||
+                (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) ||
+                (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES))
+        )
         return withTimeoutOrNull(12_000) {
             suspendCancellableCoroutine { continuation ->
                 val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {

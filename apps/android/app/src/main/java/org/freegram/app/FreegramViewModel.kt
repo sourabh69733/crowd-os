@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.media.EncodedPhoto
 import org.freegram.app.moderation.HideList
+import org.freegram.app.moderation.ModerationMessage
+import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
@@ -90,6 +92,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var hiddenCount by mutableStateOf(0); private set
     var myHideList by mutableStateOf<HideList?>(null); private set
     var moderationMessage by mutableStateOf(""); private set
+    var reportReason by mutableStateOf(REPORT_REASONS.first())
+    var reportNote by mutableStateOf("")
+    var reportStatus by mutableStateOf(""); private set
+    var appealText by mutableStateOf("")
+    var appealPostId by mutableStateOf("")
+    var inbox by mutableStateOf<List<ModerationMessage>>(emptyList()); private set
 
     // Status
     var ready by mutableStateOf(false); private set
@@ -215,6 +223,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         message = if (author) "Author added to your public hide list." else "Post added to your public hide list."
     }
 
+    /** Maintainer action from the inbox: hides a reported post by ID, even if this phone does not hold it. */
+    fun hidePost(id: String) = busyAction({ moderationMessage = it ?: "Could not hide" }) {
+        editMyHideList { it.copy(posts = it.posts + id) }
+        refreshLists()
+    }
+
     fun unhidePost(id: String) = busyAction({ moderationMessage = it ?: "Could not unhide" }) {
         editMyHideList { it.copy(posts = it.posts - id) }
         refreshLists()
@@ -223,6 +237,40 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     fun unhideAuthor(key: String) = busyAction({ moderationMessage = it ?: "Could not unhide" }) {
         editMyHideList { it.copy(authors = it.authors - key) }
         refreshLists()
+    }
+
+    /** Sends a private report on the selected post to every enabled maintainer except this phone's own key. */
+    fun sendReport() = busyAction({ reportStatus = it ?: "Report failed" }) {
+        val event = selected ?: return@busyAction
+        val targets = maintainers.filter { it.enabled && it.pubkey != pubkeyHex }.map { it.pubkey }
+        require(targets.isNotEmpty()) { "Follow at least one maintainer first" }
+        val sent = sendPrivate(targets, ModerationMessage(ModerationMessage.Type.REPORT, pubkeyHex, nowSeconds(), event.id, reportReason, reportNote.trim()))
+        reportNote = ""
+        reportStatus = "Private report sent to ${targets.size} maintainer(s). $sent Only they can read it; they will know it came from your key."
+    }
+
+    fun sendAppeal(maintainer: String) = busyAction({ moderationMessage = it ?: "Appeal failed" }) {
+        val postId = appealPostId.trim().lowercase().takeIf { it.isNotEmpty() }
+        require(postId == null || (postId.length == 64 && postId.all { it in '0'..'9' || it in 'a'..'f' })) { "Post ID must be 64 hex characters" }
+        require(appealText.isNotBlank()) { "Write why the decision should change" }
+        val sent = sendPrivate(listOf(maintainer), ModerationMessage(ModerationMessage.Type.APPEAL, pubkeyHex, nowSeconds(), postId, "appeal", appealText.trim()))
+        appealText = ""; appealPostId = ""
+        moderationMessage = "Private appeal sent. $sent"
+    }
+
+    /** Fetches and decrypts reports and appeals addressed to this phone's key, as a maintainer. */
+    fun checkInbox() = busyAction({ moderationMessage = it ?: "Could not check messages" }) {
+        val wraps = relays.flatMap { relay -> io { relayClient.fetchWraps(relay, pubkeyHex) }.events }.distinctBy { it.id }
+        val opened = io { identity.withSecret { secret -> wraps.mapNotNull { PrivateMessages.unwrap(secret, it) } } }
+        inbox = opened.distinctBy { listOf(it.from, it.createdAt, it.postId, it.reason, it.note) }.sortedByDescending { it.createdAt }
+        moderationMessage = "${inbox.size} reports and appeals (${wraps.size - opened.size} unreadable or not for this app)."
+    }
+
+    private suspend fun sendPrivate(recipients: List<String>, message: ModerationMessage): String {
+        val wraps = io { identity.withSecret { secret -> recipients.map { PrivateMessages.wrap(secret, it, message, nowSeconds()) } } }
+        val accepted = wraps.sumOf { wrap -> relays.count { relay -> io { runCatching { relayClient.publish(relay, wrap) }.getOrDefault("Network error") } == "Accepted" } }
+        val total = wraps.size * relays.size
+        return "Relays accepted $accepted of $total copies." + if (accepted < total) " Try again when online if none were accepted." else ""
     }
 
     /** Signs a new version of this phone's hide list, applies it here, and sends it to both relays. */
@@ -240,6 +288,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val outcomes = relays.map { relay -> relay to io { runCatching { relayClient.publish(relay, signed) }.getOrElse { "Network error" } } }
         moderationMessage = "Hide list published: " + outcomes.joinToString("; ") { (relay, state) -> "$relay $state" } +
             if (outcomes.any { it.second != "Accepted" }) ". Edit again when online to resend." else ""
+    }
+
+    companion object {
+        val REPORT_REASONS = listOf("Spam", "Harassment or abuse", "False or dangerous information", "Illegal content", "Other")
     }
 
     private fun parseKey(input: String): String = input.trim().let {

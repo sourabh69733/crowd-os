@@ -1,6 +1,6 @@
 # Freegram moderation
 
-Status: hide lists built 27 September 2026; private reports and appeals are designed but blocked on an encryption library decision.
+Status: hide lists, private reports and appeals built 27 September 2026.
 
 ## Decisions (27 September 2026)
 
@@ -17,18 +17,12 @@ Status: hide lists built 27 September 2026; private reports and appeals are desi
 
 Limits: hide lists are public, so anyone can see what a maintainer hid. Lists are fetched only on manual refresh and are not yet carried between phones nearby. Publishing a list is not queued for retry; the maintainer edits again when online. There is no default maintainer yet; users add one by `npub`.
 
-## Private reports and appeals (designed, not built)
+## Private reports and appeals (built)
 
 - **Report**: the reporter sends a NIP-17 private message (NIP-44 encryption inside a NIP-59 gift wrap) to each followed maintainer, naming the post ID and a reason. Relays and other users see only an encrypted message from a one-time key.
 - **Maintainer inbox**: the maintainer's app fetches and decrypts gift-wrapped messages addressed to their key and lists reports next to the post.
 - **Appeal**: an author whose post or key is hidden sends the same kind of private message to the maintainer who hid it. The maintainer's decision is visible as the next version of their public list.
 
-Blocker: this needs NIP-44 encryption, and the Phase 0 rule is not to write our own cryptography. Options:
+Implementation: encryption is Quartz 1.16.0's NIP-44 v2 (decision A); our code only assembles and checks the NIP-59 layers. Tests pass NIP-44's official conversation-key and encryption vectors, round-trip reports and appeals, reject tampered or forged wraps, other recipients, and a seal whose signer differs from the rumor's claimed sender. Outer timestamps are randomised up to two days back.
 
-| Option | Trade-off |
-|---|---|
-| Upgrade the build to Android SDK 37 and AGP 9.1, then use Quartz (Amethyst's library) | Widely used; needs a toolchain upgrade and re-testing the whole app |
-| rust-nostr `nostr-sdk` Kotlin bindings | Complete NIP-17/44/59 support; still alpha and adds a large native library |
-| Implement NIP-44 v2 from standard primitives and its official test vectors | Smallest dependency; custom crypto needing independent security review |
-
-Recommendation: the Quartz route, since the SDK upgrade is needed eventually anyway.
+Limits: the maintainer learns the reporter's key (reports are not anonymous). Messages go to the two configured relays, so a maintainer must read from at least one of them; NIP-17 inbox relay lists (kind 10050) are not used yet. The inbox is fetched on request and not stored. Relays see that someone sent the maintainer a message, and when it was fetched.

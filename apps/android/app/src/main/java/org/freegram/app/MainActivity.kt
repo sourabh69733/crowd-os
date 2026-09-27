@@ -105,6 +105,18 @@ private fun FreegramScreen(model: FreegramViewModel) {
                     Text("Maintainer tools: hiding adds to your own public hide list, applied by everyone who follows you as a maintainer.")
                     Button(enabled = enabled, onClick = { model.hideSelected(author = false) }) { Text("Hide this post (maintainer)") }
                     Button(enabled = enabled, onClick = { model.hideSelected(author = true) }) { Text("Hide this author (maintainer)") }
+                    Text("Report this post privately to your maintainers", style = MaterialTheme.typography.titleSmall)
+                    FreegramViewModel.REPORT_REASONS.forEach { reason ->
+                        Button(enabled = enabled, onClick = { model.reportReason = reason }) {
+                            Text((if (model.reportReason == reason) "● " else "") + reason)
+                        }
+                    }
+                    OutlinedTextField(value = model.reportNote, onValueChange = { model.reportNote = it }, enabled = enabled,
+                        label = { Text("Note (optional)") }, modifier = Modifier.fillMaxWidth())
+                    Button(enabled = enabled && model.maintainers.any { it.enabled && it.pubkey != model.pubkeyHex }, onClick = { model.sendReport() }) {
+                        Text("Send private report")
+                    }
+                    if (model.reportStatus.isNotEmpty()) Text(model.reportStatus)
                 }
                 if (model.confirmingDelete) Text("This removes only this phone's copy and stops any queued sending. Copies already on relays or other phones stay.")
                 Button(enabled = enabled, onClick = model::deleteSelected) {
@@ -182,6 +194,14 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 onRefresh = { model.refreshHideLists() },
                 onUnhidePost = { model.unhidePost(it) },
                 onUnhideAuthor = { model.unhideAuthor(it) },
+                appealText = model.appealText,
+                onAppealTextChange = { model.appealText = it },
+                appealPostId = model.appealPostId,
+                onAppealPostIdChange = { model.appealPostId = it },
+                onAppeal = { model.sendAppeal(it) },
+                inbox = model.inbox,
+                onCheckInbox = { model.checkInbox() },
+                onHideReported = { model.hidePost(it) },
             )
             IdentitySection(
                 npub = model.npub,

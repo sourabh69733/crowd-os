@@ -31,6 +31,14 @@ fun ModerationSection(
     onRefresh: () -> Unit,
     onUnhidePost: (String) -> Unit,
     onUnhideAuthor: (String) -> Unit,
+    appealText: String,
+    onAppealTextChange: (String) -> Unit,
+    appealPostId: String,
+    onAppealPostIdChange: (String) -> Unit,
+    onAppeal: (String) -> Unit,
+    inbox: List<ModerationMessage>,
+    onCheckInbox: () -> Unit,
+    onHideReported: (String) -> Unit,
 ) {
     Column(verticalArrangement = Arrangement.spacedBy(8.dp)) {
         Text("Maintainers", style = MaterialTheme.typography.titleMedium)
@@ -53,6 +61,25 @@ fun ModerationSection(
             Button(enabled = enabled, onClick = { onRemove(m.pubkey) }) { Text("Stop following ${m.pubkey.take(8)}…") }
         }
         Button(enabled = enabled && maintainers.isNotEmpty(), onClick = onRefresh) { Text("Refresh hide lists") }
+
+        Text("Appeal a decision", style = MaterialTheme.typography.titleSmall)
+        Text("Send a private appeal to a maintainer who hid your post or key. Only they can read it.")
+        OutlinedTextField(value = appealText, onValueChange = onAppealTextChange, enabled = enabled, label = { Text("Why should this change?") }, modifier = Modifier.fillMaxWidth(), minLines = 2)
+        OutlinedTextField(value = appealPostId, onValueChange = onAppealPostIdChange, enabled = enabled, label = { Text("Post ID (optional)") }, modifier = Modifier.fillMaxWidth())
+        maintainers.filter { it.pubkey != myKey }.forEach { m ->
+            Button(enabled = enabled && appealText.isNotBlank(), onClick = { onAppeal(m.pubkey) }) { Text("Send appeal to ${m.pubkey.take(8)}…") }
+        }
+
+        Text("Maintainer inbox", style = MaterialTheme.typography.titleSmall)
+        Text("If people follow you as a maintainer, their private reports and appeals arrive here.")
+        Button(enabled = enabled, onClick = onCheckInbox) { Text("Check reports and appeals") }
+        inbox.take(30).forEach { m ->
+            Text("${if (m.type == ModerationMessage.Type.REPORT) "Report" else "Appeal"} from ${m.from.take(12)}…: ${m.reason}" +
+                (m.postId?.let { "\nPost ${it.take(12)}…" } ?: "") + (if (m.note.isNotBlank()) "\n${m.note}" else ""))
+            if (m.type == ModerationMessage.Type.REPORT && m.postId != null && myList?.posts?.contains(m.postId) != true) {
+                Button(enabled = enabled, onClick = { onHideReported(m.postId) }) { Text("Hide post ${m.postId.take(8)}…") }
+            }
+        }
         if (myList != null && (myList.posts.isNotEmpty() || myList.authors.isNotEmpty())) {
             Text("Your hide list (public): ${myList.posts.size} posts, ${myList.authors.size} authors")
             myList.posts.take(20).forEach { id -> Button(enabled = enabled, onClick = { onUnhidePost(id) }) { Text("Unhide post ${id.take(12)}…") } }
