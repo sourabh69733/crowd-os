@@ -76,6 +76,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var npub by mutableStateOf(""); private set
     var pubkeyHex by mutableStateOf(""); private set
     var revealedBackup by mutableStateOf<String?>(null); private set
+    var backupPassword by mutableStateOf("")
+    var backupPasswordConfirm by mutableStateOf("")
+    var encryptedBackup by mutableStateOf<String?>(null); private set
+    var restorePassword by mutableStateOf("")
     var confirmingRestore by mutableStateOf(false); private set
     var confirmingReplace by mutableStateOf(false); private set
     var confirmingDelete by mutableStateOf(false); private set
@@ -366,12 +370,24 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     fun hideBackup() { revealedBackup = null }
 
+    fun createEncryptedBackup() = busyAction({ identityMessage = it ?: "Could not create backup" }) {
+        require(backupPassword == backupPasswordConfirm) { "Passwords do not match" }
+        identityMessage = "Encrypting… this takes a few seconds."
+        encryptedBackup = withContext(Dispatchers.Default) { identity.exportEncrypted(backupPassword) }
+        backupPassword = ""; backupPasswordConfirm = ""
+        identityMessage = "Encrypted backup ready. Keep the password separately; without it the backup cannot be opened."
+    }
+
     fun restore() {
         if (!confirmingRestore) { confirmingRestore = true; confirmingReplace = false; return }
         busyAction({ identityMessage = it ?: "Restore failed; current key kept" }, after = { confirmingRestore = false }) {
-            io { identity.restore(restoreInput) }
+            val input = restoreInput.trim()
+            if (input.startsWith("ncryptsec1", ignoreCase = true)) withContext(Dispatchers.Default) { identity.restoreEncrypted(input, restorePassword) }
+            else io { identity.restore(input) }
             restoreInput = ""
+            restorePassword = ""
             revealedBackup = null
+            encryptedBackup = null
             refreshIdentity()
             identityMessage = "Identity restored. New posts are signed with this key."
         }

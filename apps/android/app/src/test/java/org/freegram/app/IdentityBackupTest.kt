@@ -85,6 +85,32 @@ class IdentityBackupTest {
         assertTrue(Nip01Protocol.verifyBulletin(old))
     }
 
+    // Example from https://github.com/nostr-protocol/nips/blob/master/49.md (password "nostr", log_n 16).
+    @Test fun officialNip49ExampleRestores() {
+        val identity = ProtectedIdentity(context, TestWrapper())
+        val backup = "ncryptsec1qgg9947rlpvqu76pj5ecreduf9jxhselq2nae2kghhvd5g7dgjtcxfqtd67p9m0w57lspw8gsq6yphnm8623nsl8xn9j4jdzz84zm3frztj3z7s35vpzmqf6ksu8r89qk5z2zxfmu5gv8th8wclt0h4p"
+        identity.restoreEncrypted(backup, "nostr")
+        assertEquals("3501454135014541350145413501453fefb02227e449e57cf4d3a3ce05378683",
+            Nip19.decodeSecretKey(identity.exportNsec()).joinToString("") { "%02x".format(it) })
+    }
+
+    @Test fun encryptedBackupRoundTripsAndWrongPasswordKeepsKey() {
+        val phoneA = ProtectedIdentity(context, TestWrapper())
+        val author = phoneA.publicKeyHex()
+        assertThrows(IllegalArgumentException::class.java) { phoneA.exportEncrypted("short") }
+        val backup = phoneA.exportEncrypted("correct horse battery")
+        assertTrue(backup.startsWith("ncryptsec1"))
+        assertFalse(backup.contains(phoneA.exportNsec().removePrefix("nsec1")))
+
+        context.getSharedPreferences("freegram_identity", Context.MODE_PRIVATE).edit().clear().commit()
+        val phoneB = ProtectedIdentity(context, TestWrapper())
+        val before = phoneB.publicKeyHex()
+        assertThrows(IllegalArgumentException::class.java) { phoneB.restoreEncrypted(backup, "wrong password!") }
+        assertThrows(IllegalArgumentException::class.java) { phoneB.restoreEncrypted(backup.dropLast(3) + "qqq", "correct horse battery") }
+        assertEquals(before, phoneB.publicKeyHex())
+        assertEquals(author, phoneB.restoreEncrypted(backup, "correct horse battery"))
+    }
+
     @Test fun storedBlobIsNotThePlainSecret() {
         val identity = ProtectedIdentity(context, TestWrapper())
         val secretHex = Nip19.decodeSecretKey(identity.exportNsec()).joinToString("") { "%02x".format(it) }

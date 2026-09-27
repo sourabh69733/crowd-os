@@ -218,6 +218,22 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 onRestore = model::restore,
                 onReplace = model::replaceKey,
                 onCancelConfirm = model::cancelConfirm,
+                backupPassword = model.backupPassword,
+                onBackupPasswordChange = { model.backupPassword = it },
+                backupPasswordConfirm = model.backupPasswordConfirm,
+                onBackupPasswordConfirmChange = { model.backupPasswordConfirm = it },
+                encryptedBackup = model.encryptedBackup,
+                onCreateEncrypted = { model.createEncryptedBackup() },
+                onCopyEncrypted = { backup ->
+                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+                    val clip = ClipData.newPlainText("Freegram encrypted key backup", backup)
+                    // Keep it out of clipboard previews; it is encrypted, but still worth not displaying.
+                    clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+                    clipboard.setPrimaryClip(clip)
+                    model.message = "Encrypted backup copied."
+                },
+                restorePassword = model.restorePassword,
+                onRestorePasswordChange = { model.restorePassword = it },
             )
         }
     }

@@ -11,6 +11,7 @@ import javax.crypto.KeyGenerator
 import javax.crypto.SecretKey
 import javax.crypto.spec.GCMParameterSpec
 import android.util.Base64
+import com.vitorpamplona.quartz.nip49PrivKeyEnc.Nip49
 import org.freegram.app.protocol.Nip19
 
 /** Encrypts the stored Nostr secret at rest. */
@@ -67,6 +68,23 @@ class ProtectedIdentity(context: Context, private val wrapper: SecretWrapper = K
     /** Backup text. Callers must not log it or place it on the clipboard. */
     fun exportNsec(): String = withSecret { Nip19.encodeSecretKey(it) }
 
+    /**
+     * Password-encrypted backup (NIP-49 `ncryptsec`, scrypt with 2^16 work). Safer to copy or store than an
+     * `nsec`, but only as strong as the password.
+     */
+    fun exportEncrypted(password: String): String {
+        require(password.length >= MIN_PASSWORD) { "Use a password of at least $MIN_PASSWORD characters" }
+        return withSecret { Nip49().encrypt(it, password, 16, Nip49.EncryptedInfo.CLIENT_DOES_NOT_TRACK) }
+    }
+
+    /** Restores from an `ncryptsec` backup. A wrong password or damaged backup leaves the current key unchanged. */
+    @Synchronized fun restoreEncrypted(ncryptsec: String, password: String): String {
+        val hexKey = try { Nip49().decrypt(ncryptsec.trim(), password) } catch (failure: Exception) {
+            throw IllegalArgumentException("Wrong password or damaged backup", failure)
+        }
+        return restore(Nip19.encodeSecretKey(ByteArray(32) { hexKey.substring(it * 2, it * 2 + 2).toInt(16).toByte() }))
+    }
+
     /** Replaces this phone's key with a backed-up one. Returns the restored public key. */
     @Synchronized fun restore(nsec: String): String {
         val secret = Nip19.decodeSecretKey(nsec)
@@ -114,6 +132,8 @@ class ProtectedIdentity(context: Context, private val wrapper: SecretWrapper = K
         }
         return point.copyOfRange(1, 33).joinToString("") { "%02x".format(it) }
     }
+
+    companion object { const val MIN_PASSWORD = 10 }
 
     private fun hexToBytes(value: String) = ByteArray(value.length / 2) { value.substring(it * 2, it * 2 + 2).toInt(16).toByte() }
 }
