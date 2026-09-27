@@ -96,8 +96,27 @@ object Nip01Protocol {
         put("sig", kotlinx.serialization.json.JsonPrimitive(event.sig))
     }.toString()
 
-    fun fromJson(wire: String): BulletinEvent {
-        require(wire.toByteArray(Charsets.UTF_8).size <= MAX_EVENT_BYTES)
+    /** Signs any event kind. Used for moderation lists; posts use [signBulletin]. */
+    fun signEvent(secret: ByteArray, kind: Int, content: String, createdAt: Long, tags: Array<Array<String>>): BulletinEvent {
+        require(secret.size == 32)
+        val pubkey = bytesToHex(Secp256k1.pubkeyCreate(secret).copyOfRange(1, 33))
+        val id = id(pubkey, createdAt, kind, tags, content)
+        val aux = ByteArray(32).also(SecureRandom()::nextBytes)
+        return BulletinEvent(id, pubkey, createdAt, kind, tags, content, bytesToHex(Secp256k1.signSchnorr(hexToBytes(id), secret, aux)))
+    }
+
+    /** Checks ID and signature of an event of any kind up to [maxBytes]. */
+    fun verifySigned(event: BulletinEvent, maxBytes: Int): Boolean = try {
+        toJson(event).toByteArray(Charsets.UTF_8).size <= maxBytes &&
+            event.id.length == 64 && event.pubkey.length == 64 && event.sig.length == 128 &&
+            event.id == id(event.pubkey, event.createdAt, event.kind, event.tags, event.content) &&
+            Secp256k1.verifySchnorr(hexToBytes(event.sig), hexToBytes(event.id), hexToBytes(event.pubkey))
+    } catch (_: Exception) {
+        false
+    }
+
+    fun fromJson(wire: String, maxBytes: Int = MAX_EVENT_BYTES): BulletinEvent {
+        require(wire.toByteArray(Charsets.UTF_8).size <= maxBytes)
         val item = Json.parseToJsonElement(wire).jsonObject
         val tags = item.getValue("tags").jsonArray.map { row ->
             row.jsonArray.map { it.jsonPrimitive.content }.toTypedArray()

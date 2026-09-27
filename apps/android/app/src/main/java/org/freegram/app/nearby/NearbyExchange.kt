@@ -207,7 +207,11 @@ class NearbyExchange(
             else -> try {
                 if (store.saveNearbyEvent(event, frame.hops + 1, bridgeTo)) null else "store full"
             } catch (failure: IllegalArgumentException) {
-                if (failure.message == "This author is blocked") "blocked author" else "invalid event"
+                when (failure.message) {
+                    "This author is blocked" -> "blocked author"
+                    RoomStore.HIDDEN_MESSAGE -> "hidden by maintainer"
+                    else -> "invalid event"
+                }
             } catch (_: IllegalStateException) {
                 "store full"
             }

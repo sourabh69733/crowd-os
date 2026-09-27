@@ -29,6 +29,7 @@ import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.freegram.app.feed.FollowedFeedSection
 import org.freegram.app.identity.IdentitySection
+import org.freegram.app.moderation.ModerationSection
 import org.freegram.app.nearby.NearbySection
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.PhotoRef
@@ -100,6 +101,11 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 if (model.canDeliver) {
                     Button(enabled = enabled, onClick = { model.resubmit(saved) }) { Text("Submit saved event to relays") }
                 }
+                if (saved.pubkey != model.pubkeyHex) {
+                    Text("Maintainer tools: hiding adds to your own public hide list, applied by everyone who follows you as a maintainer.")
+                    Button(enabled = enabled, onClick = { model.hideSelected(author = false) }) { Text("Hide this post (maintainer)") }
+                    Button(enabled = enabled, onClick = { model.hideSelected(author = true) }) { Text("Hide this author (maintainer)") }
+                }
                 if (model.confirmingDelete) Text("This removes only this phone's copy and stops any queued sending. Copies already on relays or other phones stay.")
                 Button(enabled = enabled, onClick = model::deleteSelected) {
                     Text(if (model.confirmingDelete) "Confirm: delete from this phone" else "Delete from this phone")
@@ -161,6 +167,22 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 Text("Author key: ${saved.pubkey.take(16)}…")
                 Button(enabled = enabled, onClick = { model.open(saved) }) { Text("Open ${saved.id.take(12)}…") }
             }
+            ModerationSection(
+                maintainers = model.maintainers,
+                myKey = model.pubkeyHex,
+                input = model.maintainerInput,
+                onInputChange = { model.maintainerInput = it },
+                hiddenCount = model.hiddenCount,
+                myList = model.myHideList,
+                message = model.moderationMessage,
+                enabled = enabled,
+                onAdd = { model.addMaintainer() },
+                onToggle = { key, on -> model.setMaintainerEnabled(key, on) },
+                onRemove = { model.removeMaintainer(it) },
+                onRefresh = { model.refreshHideLists() },
+                onUnhidePost = { model.unhidePost(it) },
+                onUnhideAuthor = { model.unhideAuthor(it) },
+            )
             IdentitySection(
                 npub = model.npub,
                 pubkeyHex = model.pubkeyHex,

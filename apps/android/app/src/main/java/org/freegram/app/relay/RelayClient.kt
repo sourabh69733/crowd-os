@@ -7,7 +7,9 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.freegram.app.moderation.HideList
 import org.freegram.app.protocol.BulletinEvent
+import org.json.JSONObject
 import org.freegram.app.protocol.Nip01Protocol
 import org.json.JSONArray
 import java.util.UUID
@@ -81,9 +83,53 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
         return AuthorFetchResult(synchronized(events) { events.values.toList() }, status)
     }
 
+    /** Newest hide list per maintainer from [relay]; each is signature-checked before it is returned. */
+    suspend fun fetchHideLists(relay: String, maintainers: List<String>): AuthorFetchResult {
+        require(relay.startsWith("wss://") && maintainers.isNotEmpty())
+        val subscription = "freegram-mod-${UUID.randomUUID()}"
+        val request = JSONArray().put("REQ").put(subscription).put(
+            JSONObject().put("kinds", JSONArray().put(HideList.KIND)).put("authors", JSONArray(maintainers)).put("limit", maintainers.size)
+        ).toString()
+        val wanted = maintainers.toSet()
+        val lists = mutableListOf<BulletinEvent>()
+        val status = withTimeoutOrNull(12_000) {
+            suspendCancellableCoroutine<String> { continuation ->
+                val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {
+                    private fun finish(webSocket: WebSocket, result: String) {
+                        if (continuation.isActive) continuation.resume(result)
+                        webSocket.close(1000, null)
+                    }
+                    override fun onOpen(webSocket: WebSocket, response: Response) { webSocket.send(request) }
+                    override fun onMessage(webSocket: WebSocket, text: String) {
+                        if (text.length > HideList.MAX_BYTES + 1024) return
+                        try {
+                            val message = JSONArray(text)
+                            if (message.optString(1) != subscription) return
+                            when (message.optString(0)) {
+                                "EOSE" -> finish(webSocket, "Complete")
+                                "CLOSED" -> finish(webSocket, "Relay closed: ${message.optString(2).take(120)}")
+                                "EVENT" -> {
+                                    val event = Nip01Protocol.fromJson(message.getJSONObject(2).toString(), HideList.MAX_BYTES)
+                                    if (event.pubkey in wanted && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES) && HideList.of(event) != null) {
+                                        synchronized(lists) { if (lists.size < maintainers.size * 4) lists += event }
+                                    }
+                                }
+                            }
+                        } catch (_: Exception) { }
+                    }
+                    override fun onFailure(webSocket: WebSocket, t: Throwable, response: Response?) {
+                        if (continuation.isActive) continuation.resume(response?.let { "HTTP ${it.code}" } ?: "Network error")
+                    }
+                })
+                continuation.invokeOnCancellation { socket.cancel() }
+            }
+        } ?: "Timed out"
+        return AuthorFetchResult(synchronized(lists) { lists.toList() }, status)
+    }
+
     suspend fun publish(relay: String, event: BulletinEvent): String {
         require(relay.startsWith("wss://"))
-        require(Nip01Protocol.verifyBulletin(event))
+        require(Nip01Protocol.verifyBulletin(event) || (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)))
         return withTimeoutOrNull(12_000) {
             suspendCancellableCoroutine { continuation ->
                 val socket = client.newWebSocket(Request.Builder().url(relay).build(), object : WebSocketListener() {

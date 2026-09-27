@@ -7,11 +7,18 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.app.moderation.HideList
 import org.freegram.app.relay.RetryPolicy
 import org.json.JSONArray
 
 enum class AuthorState { FOLLOWING, MUTED, BLOCKED }
 data class AuthorPolicy(val pubkey: String, val state: AuthorState)
+data class Maintainer(val pubkey: String, val enabled: Boolean)
+
+/** Posts and authors hidden by the maintainers this phone follows. */
+data class Hidden(val posts: Set<String>, val authors: Set<String>) {
+    fun covers(event: BulletinEvent) = event.id in posts || event.pubkey in authors
+}
 
 /** Durable local data for public bulletins. The Nostr signing secret is stored separately. */
 class RoomStore(context: Context, databaseName: String = "freegram.db") {
@@ -81,9 +88,10 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     /** Verified posts this phone may offer to a nearby peer, newest first, with their hop counts. */
     suspend fun nearbyOffers(minCreatedAt: Long, maxCreatedAt: Long, maxHops: Int, limit: Int): List<Pair<BulletinEvent, Int>> {
         val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        val hidden = hidden()
         return dao.nearbyCandidates(minCreatedAt, maxCreatedAt, maxHops).mapNotNull { row ->
             runCatching { Nip01Protocol.fromJson(row.wire) }.getOrNull()
-                ?.takeIf { it.pubkey !in blocked && Nip01Protocol.verifyBulletin(it) }
+                ?.takeIf { it.pubkey !in blocked && !hidden.covers(it) && Nip01Protocol.verifyBulletin(it) }
                 ?.let { it to row.hops }
         }.take(limit)
     }
@@ -92,6 +100,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         require(Nip01Protocol.verifyBulletin(event))
         return database.withTransaction {
             require(dao.authorState(event.pubkey) != AuthorState.BLOCKED.name) { "This author is blocked" }
+            require(relays.isNotEmpty() || !hidden().covers(event)) { HIDDEN_MESSAGE }
             if (relays.isEmpty() && !dao.hasBulletin(event.id)) {
                 // One author's received posts may not crowd out everyone else's.
                 val oldestOfAuthor = evictionCandidates().filter { it.foreign && it.pubkey == event.pubkey }
@@ -139,10 +148,55 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     suspend fun latestEvent(): BulletinEvent? = savedEvents().firstOrNull()
     suspend fun savedEvents(): List<BulletinEvent> {
         val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()
+        val hidden = hidden()
         return dao.savedWires().mapNotNull { wire ->
             runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()
-                ?.takeIf { it.pubkey !in blocked && Nip01Protocol.verifyBulletin(it) }
+                ?.takeIf { it.pubkey !in blocked && !hidden.covers(it) && Nip01Protocol.verifyBulletin(it) }
         }
+    }
+
+    /** Stored posts currently hidden by maintainers (not by this phone's own block list). */
+    suspend fun hiddenCount(): Int {
+        val hidden = hidden()
+        return dao.savedWires().count { wire -> runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()?.let(hidden::covers) == true }
+    }
+
+    suspend fun maintainers(): List<Maintainer> = dao.maintainers().map { Maintainer(it.pubkey, it.enabled) }
+
+    suspend fun setMaintainer(pubkey: String, enabled: Boolean) {
+        require(pubkey.length == 64 && pubkey.all { it in '0'..'9' || it in 'a'..'f' }) { "Use a 64-character lowercase public key" }
+        database.withTransaction {
+            check(dao.maintainers().any { it.pubkey == pubkey } || dao.maintainers().size < MAX_MAINTAINERS) { "At most $MAX_MAINTAINERS maintainers" }
+            dao.setMaintainer(MaintainerRow(pubkey, enabled))
+        }
+    }
+
+    suspend fun removeMaintainer(pubkey: String) = database.withTransaction {
+        dao.removeMaintainer(pubkey)
+        dao.removeHideList(pubkey)
+    }
+
+    /** Keeps a verified hide list from a followed maintainer if it is newer than the stored one. */
+    suspend fun saveHideList(event: BulletinEvent): Boolean {
+        if (!Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) return false
+        val list = HideList.of(event) ?: return false
+        return database.withTransaction {
+            if (dao.maintainers().none { it.pubkey == list.maintainer }) return@withTransaction false
+            val current = dao.hideLists().firstOrNull { it.maintainer == list.maintainer }
+            if (current != null && current.createdAt >= list.createdAt) return@withTransaction false
+            dao.setHideList(HideListRow(list.maintainer, list.createdAt, Nip01Protocol.toJson(event)))
+            true
+        }
+    }
+
+    suspend fun hideList(maintainer: String): HideList? = dao.hideLists().firstOrNull { it.maintainer == maintainer }
+        ?.let { runCatching { HideList.of(Nip01Protocol.fromJson(it.wire, HideList.MAX_BYTES)) }.getOrNull() }
+
+    suspend fun hidden(): Hidden {
+        val enabled = dao.maintainers().filter { it.enabled }.map { it.pubkey }.toSet()
+        val lists = dao.hideLists().filter { it.maintainer in enabled }
+            .mapNotNull { runCatching { HideList.of(Nip01Protocol.fromJson(it.wire, HideList.MAX_BYTES)) }.getOrNull() }
+        return Hidden(lists.flatMap { it.posts }.toSet(), lists.flatMap { it.authors }.toSet())
     }
 
     suspend fun setAuthorState(pubkey: String, state: AuthorState) {
@@ -206,6 +260,8 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     companion object {
         const val MAX_BULLETINS = 100
         const val MAX_PER_AUTHOR = 20
+        const val MAX_MAINTAINERS = 5
+        const val HIDDEN_MESSAGE = "Hidden by a maintainer you follow"
 
         @Volatile private var shared: RoomStore? = null
 

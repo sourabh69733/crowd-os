@@ -18,6 +18,8 @@ import androidx.compose.ui.graphics.asImageBitmap
 import java.io.File
 import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.media.EncodedPhoto
+import org.freegram.app.moderation.HideList
+import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
 import org.freegram.app.protocol.PhotoRef
@@ -83,6 +85,13 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
     var autoBridge by mutableStateOf(store.autoBridge()); private set
     private var nearby: NearbySharing? = null
+
+    // Moderation
+    var maintainers by mutableStateOf<List<Maintainer>>(emptyList()); private set
+    var maintainerInput by mutableStateOf("")
+    var hiddenCount by mutableStateOf(0); private set
+    var myHideList by mutableStateOf<HideList?>(null); private set
+    var moderationMessage by mutableStateOf(""); private set
 
     // Status
     var ready by mutableStateOf(false); private set
@@ -167,6 +176,76 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun cancelDelete() { confirmingDelete = false }
+
+    fun addMaintainer() = busyAction({ moderationMessage = it ?: "Could not add maintainer" }) {
+        io { store.setMaintainer(parseKey(maintainerInput), true) }
+        maintainerInput = ""
+        refreshLists()
+        moderationMessage = "Maintainer followed. Refresh hide lists to fetch their list."
+    }
+
+    fun setMaintainerEnabled(pubkey: String, enabled: Boolean) = busyAction({ moderationMessage = it ?: "Could not update" }) {
+        io { store.setMaintainer(pubkey, enabled) }
+        refreshLists()
+    }
+
+    fun removeMaintainer(pubkey: String) = busyAction({ moderationMessage = it ?: "Could not remove" }) {
+        io { store.removeMaintainer(pubkey) }
+        refreshLists()
+        moderationMessage = "Stopped following that maintainer; their hidden posts show again."
+    }
+
+    fun refreshHideLists() = busyAction({ moderationMessage = it ?: "Refresh failed" }) {
+        val keys = maintainers.map { it.pubkey }
+        val results = relays.map { relay ->
+            val result = io { relayClient.fetchHideLists(relay, keys) }
+            val updated = io { result.events.count { store.saveHideList(it) } }
+            "$relay: ${result.status}, $updated updated"
+        }
+        refreshLists()
+        moderationMessage = results.joinToString("\n")
+    }
+
+    /** Maintainer action: adds the selected post or its author to this phone's own public hide list. */
+    fun hideSelected(author: Boolean) = busyAction({ message = it ?: "Could not hide" }) {
+        val event = selected ?: return@busyAction
+        editMyHideList { list -> if (author) list.copy(authors = list.authors + event.pubkey) else list.copy(posts = list.posts + event.id) }
+        selected = null
+        selectedPhoto = null
+        refreshLists()
+        message = if (author) "Author added to your public hide list." else "Post added to your public hide list."
+    }
+
+    fun unhidePost(id: String) = busyAction({ moderationMessage = it ?: "Could not unhide" }) {
+        editMyHideList { it.copy(posts = it.posts - id) }
+        refreshLists()
+    }
+
+    fun unhideAuthor(key: String) = busyAction({ moderationMessage = it ?: "Could not unhide" }) {
+        editMyHideList { it.copy(authors = it.authors - key) }
+        refreshLists()
+    }
+
+    /** Signs a new version of this phone's hide list, applies it here, and sends it to both relays. */
+    private suspend fun editMyHideList(change: (HideList) -> HideList) {
+        val me = pubkeyHex
+        val signed = io {
+            if (store.maintainers().none { it.pubkey == me }) store.setMaintainer(me, true)
+            val current = store.hideList(me) ?: HideList(me, 0, emptySet(), emptySet())
+            val next = change(current)
+            require(next.posts.size + next.authors.size <= HideList.MAX_ENTRIES) { "Hide list is full" }
+            val at = maxOf(nowSeconds(), current.createdAt + 1)
+            identity.withSecret { Nip01Protocol.signEvent(it, HideList.KIND, "", at, next.toTags()) }
+                .also { check(store.saveHideList(it)) }
+        }
+        val outcomes = relays.map { relay -> relay to io { runCatching { relayClient.publish(relay, signed) }.getOrElse { "Network error" } } }
+        moderationMessage = "Hide list published: " + outcomes.joinToString("; ") { (relay, state) -> "$relay $state" } +
+            if (outcomes.any { it.second != "Accepted" }) ". Edit again when online to resend." else ""
+    }
+
+    private fun parseKey(input: String): String = input.trim().let {
+        if (it.startsWith("npub1", ignoreCase = true)) Nip19.decodePublicKey(it).joinToString("") { b -> "%02x".format(b) } else it.lowercase()
+    }
 
     fun open(event: BulletinEvent) = viewModelScope.launch {
         confirmingDelete = false
@@ -335,6 +414,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         savedEvents = saved
         feedEvents = feed
         authorPolicies = policies
+        maintainers = io { store.maintainers() }
+        hiddenCount = io { store.hiddenCount() }
+        myHideList = io { pubkeyHex.takeIf { it.isNotEmpty() }?.let { store.hideList(it) } }
     }
 
     private suspend fun refreshIdentity() {

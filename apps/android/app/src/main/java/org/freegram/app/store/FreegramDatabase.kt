@@ -33,6 +33,14 @@ data class DraftRow(@PrimaryKey val slot: Int = 0, val content: String)
 @Entity(tableName = "author_policies")
 data class AuthorPolicyRow(@PrimaryKey val pubkey: String, val state: String)
 
+/** A key whose hide list this phone applies. */
+@Entity(tableName = "maintainers")
+data class MaintainerRow(@PrimaryKey val pubkey: String, val enabled: Boolean)
+
+/** The newest verified hide list (kind 10000) from one maintainer. */
+@Entity(tableName = "hide_lists")
+data class HideListRow(@PrimaryKey val maintainer: String, val createdAt: Long, val wire: String)
+
 /** A removable bulletin: settled outbox, or someone else's post (received, or carried from nearby even if still queued). */
 data class EvictionCandidate(val id: String, val createdAt: Long, val wire: String, val targets: Int, val hops: Int)
 
@@ -67,12 +75,18 @@ interface BulletinDao {
     @Query("SELECT * FROM author_policies ORDER BY pubkey") suspend fun authorPolicies(): List<AuthorPolicyRow>
     @Query("SELECT state FROM author_policies WHERE pubkey = :pubkey") suspend fun authorState(pubkey: String): String?
     @Query("SELECT COUNT(*) FROM author_policies") suspend fun authorCount(): Int
+    @Query("SELECT * FROM maintainers ORDER BY pubkey") suspend fun maintainers(): List<MaintainerRow>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setMaintainer(row: MaintainerRow)
+    @Query("DELETE FROM maintainers WHERE pubkey = :pubkey") suspend fun removeMaintainer(pubkey: String)
+    @Query("SELECT * FROM hide_lists") suspend fun hideLists(): List<HideListRow>
+    @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setHideList(row: HideListRow)
+    @Query("DELETE FROM hide_lists WHERE maintainer = :pubkey") suspend fun removeHideList(pubkey: String)
 }
 
 @Database(
-    entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class],
-    version = 3,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3)],
+    entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class, MaintainerRow::class, HideListRow::class],
+    version = 4,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4)],
     exportSchema = true,
 )
 abstract class FreegramDatabase : RoomDatabase() {
