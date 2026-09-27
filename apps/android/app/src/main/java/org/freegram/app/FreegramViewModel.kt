@@ -11,7 +11,16 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import org.freegram.app.feed.FollowedFeedSync
 import org.freegram.app.feed.RelayRefreshResult
+import android.graphics.BitmapFactory
+import android.net.Uri
+import androidx.compose.ui.graphics.ImageBitmap
+import androidx.compose.ui.graphics.asImageBitmap
+import java.io.File
 import org.freegram.app.identity.ProtectedIdentity
+import org.freegram.app.media.EncodedPhoto
+import org.freegram.app.media.MediaStore
+import org.freegram.app.media.PhotoEncoder
+import org.freegram.app.protocol.PhotoRef
 import org.freegram.app.nearby.ExchangeReport
 import org.freegram.app.nearby.NearbySharing
 import org.freegram.app.nearby.hasPlayServices
@@ -32,6 +41,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private val store = RoomStore.shared(application)
     private val identity = ProtectedIdentity(application)
     private val relayClient = RelayClient()
+    private val media = MediaStore(File(application.filesDir, "media"))
 
     // Inputs
     var draft by mutableStateOf("")
@@ -42,6 +52,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var lookupId by mutableStateOf("")
     var restoreInput by mutableStateOf("")
         private set
+
+    // Photo
+    var pickedPhoto by mutableStateOf<EncodedPhoto?>(null); private set
+    var pickedPreview by mutableStateOf<ImageBitmap?>(null); private set
+    var selectedPhoto by mutableStateOf<ImageBitmap?>(null); private set
+    var selectedPhotoNote by mutableStateOf(""); private set
 
     // Posts and delivery
     var selected by mutableStateOf<BulletinEvent?>(null); private set
@@ -100,12 +116,24 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         catch (failure: Exception) { message = failure.message ?: "Could not save draft" }
     }
 
+    fun pickPhoto(uri: Uri) = busyAction({ message = it ?: "Could not use that photo" }) {
+        val encoded = withContext(Dispatchers.Default) { PhotoEncoder.encode(getApplication<Application>().contentResolver, uri) }
+        pickedPhoto = encoded
+        pickedPreview = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(encoded.bytes, 0, encoded.bytes.size).asImageBitmap() }
+        message = "Photo ready: ${encoded.ref.width}×${encoded.ref.height}, ${encoded.bytes.size / 1024} KB. Location and camera details removed."
+    }
+
+    fun removePhoto() { pickedPhoto = null; pickedPreview = null }
+
     fun publish() = busyAction({ message = it ?: "Publish failed; check saved event" }) {
         message = ""
         require(relays.all { it.startsWith("wss://") } && relays.distinct().size == 2) { "Use two distinct wss:// relay URLs" }
         val text = draft
+        val photo = pickedPhoto
         val signed = io {
-            identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds()) }.also {
+            if (photo != null) media.put(photo.ref.sha256, photo.bytes, referencedPhotos() + photo.ref.sha256)
+            val tags = if (photo != null) arrayOf(photo.ref.toTag()) else emptyArray()
+            identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds(), tags) }.also {
                 store.saveEvent(it, relays)
                 store.saveDraft("")
             }
@@ -113,6 +141,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         refreshLists()
         show(signed)
         draft = ""
+        removePhoto()
         deliver(signed)
     }
 
@@ -216,13 +245,13 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             nearbyStatus = "Nearby sharing needs Google Play services, which this phone does not have."
             return
         }
-        val sharing = nearby ?: NearbySharing(getApplication(), store, viewModelScope, object : NearbySharing.Listener {
+        val sharing = nearby ?: NearbySharing(getApplication(), store, media, viewModelScope, object : NearbySharing.Listener {
             override fun onStatus(text: String) { nearbyStatus = text }
             override fun onExchange(peer: String, report: ExchangeReport) {
-                val line = "$peer: ${report.outcome}. Received ${report.received}, rejected ${report.rejected}; " +
-                    "sent ${report.sent}, ${report.acknowledged} confirmed stored by that phone."
+                val line = "$peer: ${report.outcome}. Received ${report.received} posts and ${report.photosReceived} photos, " +
+                    "rejected ${report.rejected}; sent ${report.sent} posts (${report.acknowledged} confirmed stored) and ${report.photosSent} photos."
                 nearbyLog = (listOf(line) + nearbyLog).take(10)
-                viewModelScope.launch { refreshLists() }
+                viewModelScope.launch { refreshLists(); selected?.let { show(it) } }
             }
         }).also { nearby = it }
         sharing.start()
@@ -270,7 +299,16 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         canDeliver = deliverable
         firstState = first
         secondState = second
+        val ref = PhotoRef.of(event)
+        selectedPhoto = ref?.let { r -> io { media.path(r.sha256)?.let { BitmapFactory.decodeFile(it.path)?.asImageBitmap() } } }
+        selectedPhotoNote = when {
+            ref == null -> ""
+            selectedPhoto != null -> "Photo matches its fingerprint ${ref.sha256.take(12)}…"
+            else -> "This post has a photo that is not on this phone yet. It can arrive from a nearby phone."
+        }
     }
+
+    private suspend fun referencedPhotos(): Set<String> = io { store.savedEvents().mapNotNull { PhotoRef.of(it)?.sha256 }.toSet() }
 
     /** Reloads lists after any local change, e.g. a nearby exchange. */
     suspend fun refreshLists() {

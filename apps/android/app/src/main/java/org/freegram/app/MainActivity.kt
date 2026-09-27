@@ -7,6 +7,11 @@ import android.os.Bundle
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.setContent
 import androidx.activity.viewModels
+import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.result.PickVisualMediaRequest
+import androidx.activity.result.contract.ActivityResultContracts
+import androidx.compose.foundation.Image
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.fillMaxSize
@@ -26,6 +31,7 @@ import org.freegram.app.feed.FollowedFeedSection
 import org.freegram.app.identity.IdentitySection
 import org.freegram.app.nearby.NearbySection
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.app.protocol.PhotoRef
 
 class MainActivity : ComponentActivity() {
     private val model: FreegramViewModel by viewModels()
@@ -41,6 +47,7 @@ private fun FreegramScreen(model: FreegramViewModel) {
     val context = LocalContext.current
     val enabled = model.ready && !model.busy
     val draftBytes = model.draft.toByteArray(Charsets.UTF_8).size
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickPhoto) }
 
     MaterialTheme {
         Column(
@@ -58,8 +65,14 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 minLines = 4,
             )
             Text("$draftBytes/2048 UTF-8 bytes")
+            model.pickedPreview?.let { preview ->
+                Image(bitmap = preview, contentDescription = "Photo to post", modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp))
+                Button(enabled = enabled, onClick = model::removePhoto) { Text("Remove photo") }
+            } ?: Button(enabled = enabled, onClick = {
+                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
+            }) { Text("Add photo") }
             Button(enabled = enabled, onClick = { model.saveDraft() }) { Text("Save draft") }
-            Button(enabled = enabled && model.draft.isNotBlank() && draftBytes <= 2048, onClick = { model.publish() }) {
+            Button(enabled = enabled && (model.draft.isNotBlank() || model.pickedPhoto != null) && draftBytes <= 2048, onClick = { model.publish() }) {
                 Text(if (model.busy) "Working…" else "Sign, save, and send")
             }
             OutlinedTextField(value = model.firstRelay, onValueChange = { model.firstRelay = it }, label = { Text("Relay 1") }, modifier = Modifier.fillMaxWidth())
@@ -68,6 +81,8 @@ private fun FreegramScreen(model: FreegramViewModel) {
             model.selected?.let { saved ->
                 Text("Selected saved bulletin", style = MaterialTheme.typography.titleMedium)
                 Text(saved.content)
+                model.selectedPhoto?.let { Image(bitmap = it, contentDescription = "Post photo", modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) }
+                if (model.selectedPhotoNote.isNotEmpty()) Text(model.selectedPhotoNote)
                 Text("Signature valid. Author identity and report accuracy are not verified.")
                 Text("Author key: ${saved.pubkey}")
                 Text("Event ID: ${saved.id}")
@@ -137,7 +152,7 @@ private fun FreegramScreen(model: FreegramViewModel) {
             Text("Verified local copies only. New posts are not discovered automatically yet.")
             if (model.savedEvents.isEmpty()) Text("No saved bulletins yet")
             model.savedEvents.forEach { saved ->
-                Text(saved.content.take(160))
+                Text((if (PhotoRef.of(saved) != null) "[photo] " else "") + saved.content.take(160))
                 Text("Author key: ${saved.pubkey.take(16)}…")
                 Button(enabled = enabled, onClick = { model.open(saved) }) { Text("Open ${saved.id.take(12)}…") }
             }

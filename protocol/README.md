@@ -19,3 +19,15 @@ Each frame is one UTF-8 JSON array of at most 6 KiB. Both peers run the same ste
 | 5 | `["ACK", id]` or `["NACK", id, reason]` | `ACK` only after the receiver verified and durably stored the event. |
 
 Eligible to offer: verified `kind: 1`, author not blocked locally, `created_at` within the last 48 hours and at most 10 minutes ahead, `hops` below 6. The receiver checks the same limits, rejects unrequested or repeated events, and stores the copy with `hops + 1`. `ACK` means that one peer stored it, not that anyone else received it. Hop and age limits bind compliant clients only; a malicious peer can lie about `hops` or republish elsewhere. The Android implementation is `apps/android/.../nearby/`; it is transport-independent and has only been tested over in-memory links, not radios.
+
+### Photos (capability `{"media":1}` in `HELLO`)
+
+A post's photo is a NIP-92 `imeta` tag with no URL: `["imeta","x <sha256>","m image/jpeg","size <bytes>","dim <w>x<h>"]`, at most 1 MiB and 1600 px per side. After `SENT`/acknowledgements, if both `HELLO`s carry `media: 1`:
+
+| Frame | Rule |
+|---|---|
+| `["BLOBHAVE", [sha, …]]` | At most 64 hashes, only photos of posts this phone offered in `HAVE`. |
+| `["BLOBWANT", [sha, …]]` | At most 8, all from the peer's `BLOBHAVE` and referenced by a post the receiver stores. |
+| `["BLOB", sha, size]` then `["CHUNK", sha, index, base64]`… | One photo at a time; chunks in order, at most 16 KiB of data each (frame at most 24 KiB). |
+| `["BLOBSENT"]` | No more photos from this side. |
+| `["BLOBACK", sha]` / `["BLOBNACK", sha, reason]` | `BLOBACK` only after the bytes hash to `sha`, match the post's size, decode as a JPEG within limits, and are stored. |

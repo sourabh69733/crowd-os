@@ -62,11 +62,11 @@ object Nip01Protocol {
     fun id(pubkey: String, createdAt: Long, kind: Int, tags: Array<Array<String>>, content: String): String =
         bytesToHex(MessageDigest.getInstance("SHA-256").digest(serializeForId(pubkey, createdAt, kind, tags, content).toByteArray(Charsets.UTF_8)))
 
-    fun signBulletin(secret: ByteArray, content: String, createdAt: Long): BulletinEvent {
+    fun signBulletin(secret: ByteArray, content: String, createdAt: Long, tags: Array<Array<String>> = emptyArray()): BulletinEvent {
         require(secret.size == 32)
         require(content.toByteArray(Charsets.UTF_8).size <= MAX_CONTENT_BYTES)
+        require(tags.size <= MAX_TAGS)
         val pubkey = bytesToHex(Secp256k1.pubkeyCreate(secret).copyOfRange(1, 33))
-        val tags = emptyArray<Array<String>>()
         val id = id(pubkey, createdAt, 1, tags, content)
         val aux = ByteArray(32).also(SecureRandom()::nextBytes)
         val sig = bytesToHex(Secp256k1.signSchnorr(hexToBytes(id), secret, aux))

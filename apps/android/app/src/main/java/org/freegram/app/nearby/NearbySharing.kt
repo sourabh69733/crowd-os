@@ -21,6 +21,9 @@ import com.google.android.gms.nearby.connection.Strategy
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
 import kotlinx.coroutines.CoroutineScope
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.withContext
+import org.freegram.app.media.MediaStore
 import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
@@ -50,6 +53,7 @@ fun hasPlayServices(context: Context): Boolean =
 class NearbySharing(
     private val context: Context,
     private val store: RoomStore,
+    private val media: MediaStore,
     private val scope: CoroutineScope,
     private val listener: Listener,
 ) {
@@ -119,15 +123,15 @@ class NearbySharing(
                 return
             }
             listener.onStatus("Exchanging with $peer…")
-            scope.launch {
+            scope.launch(Dispatchers.IO) {
                 val bridgeTo = if (store.autoBridge()) listOf(store.relayUrl(0), store.relayUrl(1)) else emptyList()
-                val report = try { NearbyExchange(store, bridgeTo = bridgeTo).run(link) } finally {
+                val report = try { NearbyExchange(store, bridgeTo = bridgeTo, media = media).run(link) } finally {
                     link.awaitFlushed(5_000)
                     client.disconnectFromEndpoint(endpointId)
                     release(endpointId)
                 }
                 if (report.received > 0 && bridgeTo.isNotEmpty()) RelayRetryWorker.schedule(context)
-                listener.onExchange(peer, report)
+                withContext(Dispatchers.Main) { listener.onExchange(peer, report) }
             }
         }
 
@@ -155,7 +159,7 @@ private class NearbyPeerLink(private val client: ConnectionsClient, private val 
     val payloadCallback = object : PayloadCallback() {
         override fun onPayloadReceived(endpointId: String, payload: Payload) {
             val bytes = payload.asBytes()
-            val accepted = payload.type == Payload.Type.BYTES && bytes != null && bytes.size <= NearbyFrames.MAX_FRAME_BYTES &&
+            val accepted = payload.type == Payload.Type.BYTES && bytes != null && bytes.size <= NearbyFrames.MAX_CHUNK_FRAME_BYTES &&
                 inbox.trySend(String(bytes, Charsets.UTF_8)).isSuccess
             // Wrong type, oversized or flooding: drop the peer rather than buffer.
             if (!accepted) {
