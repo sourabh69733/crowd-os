@@ -75,6 +75,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var revealedBackup by mutableStateOf<String?>(null); private set
     var confirmingRestore by mutableStateOf(false); private set
     var confirmingReplace by mutableStateOf(false); private set
+    var confirmingDelete by mutableStateOf(false); private set
 
     // Nearby
     var nearbyRunning by mutableStateOf(false); private set
@@ -150,7 +151,25 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         deliver(event)
     }
 
+    fun deleteSelected() {
+        val event = selected ?: return
+        if (!confirmingDelete) { confirmingDelete = true; return }
+        busyAction({ message = it ?: "Could not delete" }, after = { confirmingDelete = false }) {
+            io {
+                store.deleteLocal(event.id)
+                PhotoRef.of(event)?.let { media.removeIfUnused(it.sha256, referencedPhotos()) }
+            }
+            selected = null
+            selectedPhoto = null
+            refreshLists()
+            message = "Deleted from this phone. Copies already on relays or other phones remain."
+        }
+    }
+
+    fun cancelDelete() { confirmingDelete = false }
+
     fun open(event: BulletinEvent) = viewModelScope.launch {
+        confirmingDelete = false
         try { show(event) } catch (failure: Exception) { message = failure.message ?: "Could not open post" }
     }
 

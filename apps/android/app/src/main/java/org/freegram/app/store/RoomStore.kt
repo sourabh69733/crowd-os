@@ -72,6 +72,12 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     suspend fun hasBulletin(eventId: String): Boolean = dao.hasBulletin(eventId)
 
+    /** Removes this phone's copy and any queued relay delivery. Copies on relays or other phones are unaffected. */
+    suspend fun deleteLocal(eventId: String) = database.withTransaction {
+        dao.deleteDeliveries(eventId)
+        dao.deleteBulletin(eventId)
+    }
+
     /** Verified posts this phone may offer to a nearby peer, newest first, with their hop counts. */
     suspend fun nearbyOffers(minCreatedAt: Long, maxCreatedAt: Long, maxHops: Int, limit: Int): List<Pair<BulletinEvent, Int>> {
         val blocked = dao.authorPolicies().filter { it.state == AuthorState.BLOCKED.name }.map { it.pubkey }.toSet()

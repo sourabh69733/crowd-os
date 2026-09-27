@@ -100,6 +100,11 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 if (model.canDeliver) {
                     Button(enabled = enabled, onClick = { model.resubmit(saved) }) { Text("Submit saved event to relays") }
                 }
+                if (model.confirmingDelete) Text("This removes only this phone's copy and stops any queued sending. Copies already on relays or other phones stay.")
+                Button(enabled = enabled, onClick = model::deleteSelected) {
+                    Text(if (model.confirmingDelete) "Confirm: delete from this phone" else "Delete from this phone")
+                }
+                if (model.confirmingDelete) Button(onClick = model::cancelDelete) { Text("Cancel") }
             }
             FollowedFeedSection(
                 authorInput = model.authorInput,

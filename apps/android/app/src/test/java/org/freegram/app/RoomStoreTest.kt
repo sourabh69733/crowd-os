@@ -148,6 +148,21 @@ class RoomStoreTest {
         store.close()
     }
 
+    @Test fun deleteLocalRemovesPostAndQueuedDelivery() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val post = event()
+        store.saveEvent(post, relayTargets)
+        store.setRelayState(post.id, relayTargets[0], "Sending")
+        store.deleteLocal(post.id)
+        assertTrue(store.savedEvents().isEmpty())
+        assertTrue(store.deliveryTargets(post.id).isEmpty())
+        assertTrue(store.retryableDeliveries(0).isEmpty())
+        store.saveReceivedEvent(post) // can be received again later
+        assertEquals(listOf(post), store.savedEvents())
+        store.close()
+    }
+
     @Test fun blockedAuthorPostsAreEvictedFirstThenAcceptedOutbox() = runBlocking {
         val store = RoomStore(context, databaseName)
         store.initialize()

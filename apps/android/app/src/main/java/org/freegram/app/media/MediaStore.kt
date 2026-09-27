@@ -23,6 +23,9 @@ class MediaStore(private val dir: File, private val maxTotalBytes: Long = 50L * 
 
     @Synchronized fun read(sha: String): ByteArray? = file(sha).takeIf { it.isFile }?.readBytes()
 
+    /** Deletes a photo unless a stored post still references it. */
+    @Synchronized fun removeIfUnused(sha: String, keep: Set<String>) { if (sha !in keep) file(sha).delete() }
+
     fun path(sha: String): File? = file(sha).takeIf { it.isFile }
 
     /**
