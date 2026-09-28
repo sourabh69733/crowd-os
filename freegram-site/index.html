@@ -1,0 +1,358 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Freegram · Coming soon</title>
+<meta name="description" content="Freegram: speak freely, even when the internet doesn't. Posts hop phone to phone when networks fail, then reach the world when any phone gets online. Coming soon.">
+<meta property="og:title" content="Freegram · Coming soon">
+<meta property="og:description" content="Speak freely. Even when the internet doesn't.">
+<meta property="og:url" content="https://freegram.in">
+<meta name="theme-color" content="#07100f">
+<link rel="icon" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 32 32'%3E%3Crect width='32' height='32' rx='8' fill='%2307100f'/%3E%3Ccircle cx='9' cy='22' r='3' fill='%2334e0b0'/%3E%3Ccircle cx='23' cy='10' r='3' fill='%2334e0b0'/%3E%3Ccircle cx='22' cy='23' r='2.4' fill='%2334e0b0' opacity='.6'/%3E%3Cpath d='M9 22 23 10M23 10l-1 13' stroke='%2334e0b0' stroke-width='1.6'/%3E%3C/svg%3E">
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=Space+Grotesk:wght@400;500;700&family=JetBrains+Mono:wght@400;500&display=swap" rel="stylesheet">
+<style>
+:root{
+  --bg:#07100f; --bg2:#0b1816; --card:rgba(255,255,255,.035); --line:rgba(255,255,255,.09);
+  --text:#e8f3f0; --muted:#8fa6a0; --accent:#34e0b0; --accent2:#7cf5d4; --glow:rgba(52,224,176,.35);
+}
+@media (prefers-color-scheme: light){
+  :root{
+    --bg:#f5faf8; --bg2:#e9f3ef; --card:rgba(0,0,0,.03); --line:rgba(0,0,0,.09);
+    --text:#0b1a17; --muted:#51665f; --accent:#0e9f78; --accent2:#0b7d5f; --glow:rgba(14,159,120,.22);
+  }
+}
+*{box-sizing:border-box;margin:0;padding:0}
+html{scroll-behavior:smooth}
+body{
+  font-family:"Space Grotesk",system-ui,sans-serif; background:var(--bg); color:var(--text);
+  line-height:1.6; overflow-x:hidden; -webkit-font-smoothing:antialiased;
+}
+canvas#mesh{position:fixed;inset:0;width:100%;height:100%;z-index:0;pointer-events:none}
+.wrap{position:relative;z-index:1;max-width:1040px;margin:0 auto;padding:0 20px}
+.mono{font-family:"JetBrains Mono",monospace}
+
+/* nav */
+nav{display:flex;justify-content:space-between;align-items:center;padding:22px 0}
+.logo{display:flex;align-items:center;gap:10px;font-weight:700;font-size:1.15rem;letter-spacing:-.01em}
+.logo svg{width:28px;height:28px}
+.nav-cta{color:var(--muted);text-decoration:none;font-size:.9rem;border:1px solid var(--line);padding:8px 14px;border-radius:999px;transition:.2s}
+.nav-cta:hover{color:var(--text);border-color:var(--accent)}
+
+/* hero */
+.hero{min-height:calc(100vh - 80px);display:flex;flex-direction:column;justify-content:center;padding:40px 0 80px}
+.badge{
+  display:inline-flex;align-items:center;gap:10px;width:max-content;font-size:.78rem;letter-spacing:.14em;
+  text-transform:uppercase;color:var(--accent);border:1px solid var(--line);background:var(--card);
+  padding:7px 14px;border-radius:999px;backdrop-filter:blur(6px)
+}
+.pulse{width:8px;height:8px;border-radius:50%;background:var(--accent);box-shadow:0 0 0 0 var(--glow);animation:pulse 2s infinite}
+@keyframes pulse{70%{box-shadow:0 0 0 10px transparent}100%{box-shadow:0 0 0 0 transparent}}
+h1{font-size:clamp(3rem,11vw,7.5rem);line-height:.95;letter-spacing:-.045em;margin:26px 0 22px;font-weight:700}
+h1 .grad{background:linear-gradient(100deg,var(--accent),var(--accent2) 60%,var(--text));-webkit-background-clip:text;background-clip:text;color:transparent}
+.tag{font-size:clamp(1.2rem,3vw,1.7rem);max-width:640px;color:var(--text);font-weight:500;letter-spacing:-.01em}
+.tag span{color:var(--muted)}
+.sub{margin-top:18px;max-width:560px;color:var(--muted);font-size:1.02rem}
+.typed{margin-top:34px;font-size:.88rem;color:var(--muted);min-height:1.6em}
+.typed b{color:var(--accent);font-weight:500}
+.caret{display:inline-block;width:8px;height:1em;background:var(--accent);vertical-align:-2px;margin-left:2px;animation:blink 1s steps(1) infinite}
+@keyframes blink{50%{opacity:0}}
+.hero-actions{display:flex;gap:12px;flex-wrap:wrap;margin-top:34px}
+.btn{
+  display:inline-flex;align-items:center;gap:8px;text-decoration:none;font-weight:500;font-size:.98rem;
+  padding:13px 22px;border-radius:12px;transition:transform .15s, box-shadow .2s, border-color .2s;cursor:pointer;border:0;font-family:inherit
+}
+.btn-primary{background:var(--accent);color:#04201a;box-shadow:0 8px 30px -8px var(--glow)}
+.btn-primary:hover{transform:translateY(-2px);box-shadow:0 12px 40px -8px var(--glow)}
+.btn-ghost{color:var(--text);border:1px solid var(--line);background:var(--card)}
+.btn-ghost:hover{border-color:var(--accent)}
+
+/* sections */
+section{padding:90px 0}
+.eyebrow{font-size:.78rem;letter-spacing:.16em;text-transform:uppercase;color:var(--accent);margin-bottom:12px}
+h2{font-size:clamp(1.9rem,5vw,3rem);letter-spacing:-.03em;line-height:1.08;max-width:700px}
+.lead{color:var(--muted);max-width:620px;margin-top:14px;font-size:1.05rem}
+
+.cards{display:grid;grid-template-columns:repeat(auto-fit,minmax(250px,1fr));gap:16px;margin-top:44px}
+.card{
+  background:var(--card);border:1px solid var(--line);border-radius:18px;padding:26px;
+  backdrop-filter:blur(8px);transition:transform .25s,border-color .25s
+}
+.card:hover{transform:translateY(-4px);border-color:color-mix(in srgb,var(--accent) 50%,var(--line))}
+.icon{width:44px;height:44px;border-radius:12px;display:grid;place-items:center;background:color-mix(in srgb,var(--accent) 14%,transparent);color:var(--accent);margin-bottom:18px}
+.icon svg{width:22px;height:22px}
+.card h3{font-size:1.18rem;letter-spacing:-.01em;margin-bottom:8px}
+.card p{color:var(--muted);font-size:.96rem}
+
+/* flow demo */
+.flow{margin-top:44px;border:1px solid var(--line);border-radius:22px;background:var(--card);padding:28px 20px 22px;backdrop-filter:blur(8px)}
+.flow svg{width:100%;height:auto;display:block}
+.flow .node circle.ring{fill:none;stroke:var(--line);stroke-width:1.5}
+.flow .node circle.core{fill:var(--bg2);stroke:var(--accent);stroke-width:2}
+.flow .node text{fill:var(--muted);font-family:"JetBrains Mono",monospace;font-size:11px;text-anchor:middle}
+.flow .link{stroke:var(--line);stroke-width:2;stroke-dasharray:4 6}
+.flow .packet{fill:var(--accent);filter:drop-shadow(0 0 6px var(--accent))}
+.flow .cloud{fill:none;stroke:var(--accent);stroke-width:2}
+.steps{display:grid;grid-template-columns:repeat(auto-fit,minmax(200px,1fr));gap:14px;margin-top:22px}
+.step{font-size:.92rem;color:var(--muted)}
+.step b{display:block;color:var(--text);font-weight:500;margin-bottom:2px}
+.step .n{color:var(--accent);font-family:"JetBrains Mono",monospace;font-size:.8rem}
+
+/* roadmap */
+.road{margin-top:44px;display:grid;gap:0;position:relative}
+.road::before{content:"";position:absolute;left:11px;top:8px;bottom:8px;width:2px;background:linear-gradient(var(--accent),var(--line) 70%)}
+.ms{display:grid;grid-template-columns:24px 1fr;gap:18px;padding:14px 0}
+.dot{width:24px;height:24px;border-radius:50%;border:2px solid var(--line);background:var(--bg);display:grid;place-items:center;position:relative;z-index:1}
+.ms.done .dot{border-color:var(--accent);background:var(--accent)}
+.ms.done .dot::after{content:"";width:7px;height:4px;border:2px solid #04201a;border-top:0;border-right:0;transform:rotate(-45deg) translate(1px,-1px)}
+.ms.now .dot{border-color:var(--accent)}
+.ms.now .dot::after{content:"";width:8px;height:8px;border-radius:50%;background:var(--accent);animation:pulse 2s infinite}
+.ms h4{font-size:1.05rem;display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+.pill{font-size:.7rem;font-family:"JetBrains Mono",monospace;padding:2px 8px;border-radius:999px;border:1px solid var(--line);color:var(--muted);font-weight:400}
+.ms.done .pill{color:var(--accent);border-color:color-mix(in srgb,var(--accent) 40%,transparent)}
+.ms p{color:var(--muted);font-size:.94rem}
+
+/* contact */
+.contact{
+  text-align:center;border:1px solid var(--line);border-radius:26px;padding:64px 22px;
+  background:radial-gradient(ellipse at top,color-mix(in srgb,var(--accent) 14%,transparent),transparent 70%),var(--card);
+  backdrop-filter:blur(8px)
+}
+.contact h2{margin:0 auto}
+.contact .lead{margin:14px auto 30px}
+.email{font-family:"JetBrains Mono",monospace;font-size:clamp(.85rem,2.6vw,1rem);color:var(--muted);margin-top:18px;word-break:break-all}
+.copied{color:var(--accent);font-size:.85rem;height:1.2em;margin-top:6px}
+
+footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;border-top:1px solid var(--line);margin-top:40px}
+
+/* reveal */
+.reveal{opacity:0;transform:translateY(24px);transition:opacity .8s ease,transform .8s ease}
+.reveal.in{opacity:1;transform:none}
+@media (prefers-reduced-motion: reduce){
+  .reveal{opacity:1;transform:none;transition:none}
+  .pulse,.caret,.ms.now .dot::after{animation:none}
+}
+@media (max-width:560px){
+  section{padding:64px 0}
+  .hero{min-height:auto;padding:50px 0 60px}
+  .btn{width:100%;justify-content:center}
+}
+</style>
+</head>
+<body>
+<canvas id="mesh" aria-hidden="true"></canvas>
+
+<div class="wrap">
+  <nav>
+    <div class="logo">
+      <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--bg2)" stroke="var(--line)"/><path d="M9 22 23 10M23 10l-1 13" stroke="var(--accent)" stroke-width="1.6"/><circle cx="9" cy="22" r="3" fill="var(--accent)"/><circle cx="23" cy="10" r="3" fill="var(--accent)"/><circle cx="22" cy="23" r="2.4" fill="var(--accent)" opacity=".6"/></svg>
+      Freegram
+    </div>
+    <a class="nav-cta" href="#contact">Get in touch</a>
+  </nav>
+
+  <header class="hero">
+    <span class="badge"><span class="pulse"></span>Coming soon</span>
+    <h1>Speak <span class="grad">freely.</span></h1>
+    <p class="tag">Even when the internet doesn't. <span>A social app that keeps working when networks fail.</span></p>
+    <p class="sub">Freegram lets posts travel phone to phone when the signal is gone, then carries them to the world the moment any phone gets back online. Unchanged. Signed by you.</p>
+    <div class="typed mono" aria-live="polite"><span id="typed"></span><span class="caret"></span></div>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="#contact">Join early testing →</a>
+      <a class="btn btn-ghost" href="#how">See how it works</a>
+    </div>
+  </header>
+
+  <section id="what" class="reveal">
+    <div class="eyebrow mono">// what is freegram</div>
+    <h2>A feed that doesn't need a tower.</h2>
+    <p class="lead">Networks go down during floods, crowds, blackouts and outages. That's exactly when people need to share what's happening. Freegram is built for that moment.</p>
+    <div class="cards">
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><circle cx="5" cy="17" r="2.5"/><circle cx="19" cy="17" r="2.5"/><circle cx="12" cy="6" r="2.5"/><path d="M7 15.5 10.5 8M17 15.5 13.5 8M7.5 17h9"/></svg></div>
+        <h3>Works offline</h3>
+        <p>No internet? Posts hop between nearby phones over Bluetooth and Wi‑Fi, spreading through the crowd on their own.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="4" y="10" width="16" height="11" rx="2.5"/><path d="M8 10V7a4 4 0 0 1 8 0v3"/><circle cx="12" cy="15.5" r="1.3"/></svg></div>
+        <h3>Signed by you</h3>
+        <p>Every post carries your own cryptographic signature. Anyone can pass it along, but nobody can quietly change it.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><path d="M7 18a4.5 4.5 0 0 1-.6-8.96A6 6 0 0 1 18 9.5a4 4 0 0 1-.5 8.5"/><path d="M12 12v8M9 15l3-3 3 3"/></svg></div>
+        <h3>Reaches the world later</h3>
+        <p>When any phone that carries your post finds a connection, it goes online automatically. Your voice gets out.</p>
+      </div>
+      <div class="card">
+        <div class="icon"><svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2" stroke-linecap="round"><rect x="3" y="5" width="18" height="14" rx="2.5"/><circle cx="9" cy="10" r="1.8"/><path d="m21 15-5-5-8 9"/></svg></div>
+        <h3>Photos, peer to peer</h3>
+        <p>Pictures are shared by fingerprint, so any phone that has one can hand it to the next. No single server to block.</p>
+      </div>
+    </div>
+  </section>
+
+  <section id="how" class="reveal">
+    <div class="eyebrow mono">// how it works</div>
+    <h2>One post. Many hands.</h2>
+    <p class="lead">Watch a post leave a phone with no signal and find its way online.</p>
+    <div class="flow">
+      <svg viewBox="0 0 800 200" role="img" aria-label="A post hops from phone to phone until one reaches the internet">
+        <line class="link" x1="80" y1="120" x2="250" y2="80"/>
+        <line class="link" x1="250" y1="80" x2="420" y2="130"/>
+        <line class="link" x1="420" y1="130" x2="580" y2="80"/>
+        <line class="link" x1="580" y1="80" x2="720" y2="100"/>
+        <g class="node"><circle class="ring" cx="80" cy="120" r="26"/><circle class="core" cx="80" cy="120" r="12"/><text x="80" y="170">you · no signal</text></g>
+        <g class="node"><circle class="ring" cx="250" cy="80" r="26"/><circle class="core" cx="250" cy="80" r="12"/><text x="250" y="130">nearby</text></g>
+        <g class="node"><circle class="ring" cx="420" cy="130" r="26"/><circle class="core" cx="420" cy="130" r="12"/><text x="420" y="180">nearby</text></g>
+        <g class="node"><circle class="ring" cx="580" cy="80" r="26"/><circle class="core" cx="580" cy="80" r="12"/><text x="580" y="130">back online</text></g>
+        <g class="node"><path class="cloud" d="M700 118a18 18 0 0 1-2-35.9A26 26 0 0 1 748 86a16 16 0 0 1 2 32z"/><text x="722" y="150">the world</text></g>
+        <circle class="packet" r="6">
+          <animateMotion dur="5s" repeatCount="indefinite" path="M80 120 L250 80 L420 130 L580 80 L720 100" keyTimes="0;0.25;0.5;0.75;1" keyPoints="0;0.25;0.5;0.75;1" calcMode="linear"/>
+        </circle>
+      </svg>
+      <div class="steps">
+        <div class="step"><span class="n">01</span><b>You post</b>Written and signed on your phone, even in airplane mode.</div>
+        <div class="step"><span class="n">02</span><b>It spreads nearby</b>Phones around you pick it up and pass it on.</div>
+        <div class="step"><span class="n">03</span><b>Someone gets signal</b>Their phone publishes it, exactly as you wrote it.</div>
+      </div>
+    </div>
+  </section>
+
+  <section id="roadmap" class="reveal">
+    <div class="eyebrow mono">// progress</div>
+    <h2>Being built, in the open.</h2>
+    <div class="road">
+      <div class="ms done"><div class="dot"></div><div><h4>Signed posts &amp; internet feed <span class="pill">done</span></h4><p>Your own key, your own posts, published to open relays.</p></div></div>
+      <div class="ms done"><div class="dot"></div><div><h4>Phone-to-phone sharing <span class="pill">done</span></h4><p>Posts and photos move between nearby phones with no internet.</p></div></div>
+      <div class="ms done"><div class="dot"></div><div><h4>Offline to online bridge <span class="pill">done</span></h4><p>Posts received nearby go online by themselves when a connection appears.</p></div></div>
+      <div class="ms now"><div class="dot"></div><div><h4>Field testing on real phones <span class="pill">in progress</span></h4><p>Safety, moderation and reliability checks on real devices.</p></div></div>
+      <div class="ms"><div class="dot"></div><div><h4>Public beta on Android <span class="pill">soon</span></h4><p>Open to early testers first. Want in? Say hi below.</p></div></div>
+    </div>
+  </section>
+
+  <section id="contact" class="reveal">
+    <div class="contact">
+      <div class="eyebrow mono">// say hello</div>
+      <h2>Want to test, help, or just talk?</h2>
+      <p class="lead">Early testers, developers, researchers and anyone who cares about keeping people connected: I'd love to hear from you.</p>
+      <a class="btn btn-primary" id="mail" href="#contact">✉ Email me</a>
+      <div class="email" id="emailText">loading…</div>
+      <div class="copied" id="copied"></div>
+    </div>
+  </section>
+
+  <footer>
+    <span>© <span id="yr">2026</span> Freegram · freegram.in</span>
+    <span class="mono">made for when the signal drops</span>
+  </footer>
+</div>
+
+<script>
+// email assembled at runtime to keep basic scrapers away
+(() => {
+  const u = ["sourabhsahu", "69733"].join(""), d = ["gmail", "com"].join(".");
+  const addr = u + "@" + d;
+  const mail = document.getElementById("mail");
+  mail.href = "mailto:" + addr + "?subject=" + encodeURIComponent("Hello from freegram.in");
+  const t = document.getElementById("emailText");
+  t.textContent = addr + "  ·  tap to copy";
+  t.style.cursor = "pointer";
+  t.addEventListener("click", () => {
+    navigator.clipboard?.writeText(addr).then(() => {
+      document.getElementById("copied").textContent = "Copied!";
+      setTimeout(() => document.getElementById("copied").textContent = "", 1800);
+    });
+  });
+  document.getElementById("yr").textContent = new Date().getFullYear();
+})();
+
+// typed status line
+(() => {
+  const lines = [
+    "> network: offline",
+    "> found 3 phones nearby",
+    "> post shared · signature verified",
+    "> connection found · publishing…",
+    "> delivered to the world ✓"
+  ];
+  const el = document.getElementById("typed");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  if (reduce) { el.innerHTML = "<b>" + lines[4] + "</b>"; return; }
+  let i = 0, j = 0, del = false;
+  (function tick() {
+    const s = lines[i];
+    el.innerHTML = (i === lines.length - 1 ? "<b>" : "") + s.slice(0, j) + (i === lines.length - 1 ? "</b>" : "");
+    if (!del && j < s.length) { j++; setTimeout(tick, 38); }
+    else if (!del) { del = true; setTimeout(tick, 1500); }
+    else if (j > 0) { j -= 2; if (j < 0) j = 0; setTimeout(tick, 14); }
+    else { del = false; i = (i + 1) % lines.length; setTimeout(tick, 250); }
+  })();
+})();
+
+// scroll reveal
+(() => {
+  const io = new IntersectionObserver(es => es.forEach(e => {
+    if (e.isIntersecting) { e.target.classList.add("in"); io.unobserve(e.target); }
+  }), { threshold: .12 });
+  document.querySelectorAll(".reveal").forEach(el => io.observe(el));
+})();
+
+// background mesh: drifting nodes that link when close, with message pulses
+(() => {
+  const c = document.getElementById("mesh"), x = c.getContext("2d");
+  const reduce = matchMedia("(prefers-reduced-motion: reduce)").matches;
+  let w, h, dpr, nodes = [], pulses = [], accent = "52,224,176";
+  function readAccent() {
+    const v = getComputedStyle(document.documentElement).getPropertyValue("--accent").trim();
+    const m = v.match(/^#([0-9a-f]{6})$/i);
+    if (m) { const n = parseInt(m[1], 16); accent = [(n >> 16) & 255, (n >> 8) & 255, n & 255].join(","); }
+  }
+  function size() {
+    dpr = Math.min(devicePixelRatio || 1, 2);
+    w = c.width = innerWidth * dpr; h = c.height = innerHeight * dpr;
+    const count = Math.round(Math.min(70, (innerWidth * innerHeight) / 22000));
+    nodes = Array.from({ length: count }, () => ({
+      x: Math.random() * w, y: Math.random() * h,
+      vx: (Math.random() - .5) * .25 * dpr, vy: (Math.random() - .5) * .25 * dpr
+    }));
+    pulses = [];
+  }
+  const R = () => 150 * dpr;
+  function frame() {
+    x.clearRect(0, 0, w, h);
+    const r = R();
+    for (const n of nodes) {
+      n.x += n.vx; n.y += n.vy;
+      if (n.x < 0 || n.x > w) n.vx *= -1;
+      if (n.y < 0 || n.y > h) n.vy *= -1;
+    }
+    for (let i = 0; i < nodes.length; i++) for (let j = i + 1; j < nodes.length; j++) {
+      const a = nodes[i], b = nodes[j], d = Math.hypot(a.x - b.x, a.y - b.y);
+      if (d < r) {
+        x.strokeStyle = `rgba(${accent},${(1 - d / r) * .16})`;
+        x.lineWidth = dpr; x.beginPath(); x.moveTo(a.x, a.y); x.lineTo(b.x, b.y); x.stroke();
+        if (!reduce && Math.random() < .0008) pulses.push({ a, b, t: 0 });
+      }
+    }
+    for (const n of nodes) {
+      x.fillStyle = `rgba(${accent},.45)`;
+      x.beginPath(); x.arc(n.x, n.y, 1.8 * dpr, 0, 7); x.fill();
+    }
+    pulses = pulses.filter(p => p.t <= 1);
+    for (const p of pulses) {
+      p.t += .012;
+      const px = p.a.x + (p.b.x - p.a.x) * p.t, py = p.a.y + (p.b.y - p.a.y) * p.t;
+      x.fillStyle = `rgba(${accent},.9)`; x.shadowColor = `rgba(${accent},1)`; x.shadowBlur = 10 * dpr;
+      x.beginPath(); x.arc(px, py, 2.4 * dpr, 0, 7); x.fill(); x.shadowBlur = 0;
+    }
+    if (!reduce) requestAnimationFrame(frame);
+  }
+  readAccent(); size(); frame();
+  addEventListener("resize", () => { size(); if (reduce) frame(); });
+  matchMedia("(prefers-color-scheme: light)").addEventListener("change", readAccent);
+})();
+</script>
+</body>
+</html>
