@@ -1,4 +1,8 @@
 {
   "name": "freegram-site",
-  "private": true
+  "private": true,
+  "scripts": {
+    "build": "echo static site, nothing to build",
+    "deploy": "npx wrangler deploy"
+  }
 }
