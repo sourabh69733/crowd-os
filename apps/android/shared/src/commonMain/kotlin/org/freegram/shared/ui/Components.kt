@@ -84,7 +84,10 @@ fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(10.dp)) {
             Avatar(post.authorLabel, post.authorHue, 38.dp)
             Column(Modifier.weight(1f)) {
-                Text(if (post.mine) "You" else post.authorLabel, fontWeight = FontWeight.SemiBold, color = c.ink, fontSize = 15.sp)
+                Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                    Text(if (post.mine) "You" else post.authorLabel, fontWeight = FontWeight.SemiBold, color = c.ink, fontSize = 15.sp)
+                    Text("· ${post.authorTag}", color = c.ink3, fontSize = 12.sp)
+                }
                 Row(horizontalArrangement = Arrangement.spacedBy(6.dp)) {
                     Text("✓ Signed", color = c.teal, fontSize = 12.sp, fontWeight = FontWeight.SemiBold)
                     Text("· ${post.time}", color = c.ink3, fontSize = 12.sp)

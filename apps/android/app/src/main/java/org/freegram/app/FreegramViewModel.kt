@@ -27,6 +27,7 @@ import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
 import org.freegram.app.protocol.PhotoRef
+import org.freegram.app.protocol.ProfileEvent
 import org.freegram.app.nearby.NearbyService
 import org.freegram.app.nearby.NearbyState
 import org.freegram.app.nearby.hasPlayServices
@@ -133,7 +134,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     override val canReport: Boolean get() = maintainers.any { it.enabled && it.pubkey != pubkeyHex }
     override val isMaintainer: Boolean get() = pubkeyHex.isNotEmpty() && maintainers.any { it.pubkey == pubkeyHex }
     private var backupDone by mutableStateOf(store.backupDone())
-    override val me: MeUi get() = MeUi(shortKey(npub), npub, hueOf(pubkeyHex), backupDone)
+    private var names by mutableStateOf<Map<String, String>>(emptyMap())
+    override val me: MeUi get() = MeUi(names[pubkeyHex] ?: shortKey(npub), names[pubkeyHex].orEmpty(), npub, npub.takeLast(4), hueOf(pubkeyHex), backupDone)
+    override var needsOnboarding by mutableStateOf(!store.onboarded()); private set
+    override var freshBackup by mutableStateOf<String?>(null); private set
     private var nearbyCounts by mutableStateOf(Triple(0, 0, 0))
     private var nearbyActivity by mutableStateOf<List<Pair<String, Long>>>(emptyList())
     override val nearby: NearbyUi get() = NearbyUi(
@@ -341,6 +345,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             val following = authorPolicies.any { it.state == AuthorState.FOLLOWING }
             if (online && following) syncFeed()
             if (online && maintainers.isNotEmpty()) syncHideLists()
+            if (online) syncProfiles()
             if (io { store.retryableDeliveries(nowSeconds() - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty() }) RelayRetryWorker.schedule(getApplication())
             refreshLists()
             toast = when {
@@ -420,8 +425,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             states.any { it.startsWith("Rejected") } -> PostSource.Rejected
             else -> PostSource.OnlyHere
         }
-        val label = runCatching { shortKey(Nip19.encodePublicKey(ByteArray(32) { event.pubkey.substring(it * 2, it * 2 + 2).toInt(16).toByte() })) }.getOrDefault(event.pubkey.take(12))
-        return PostUi(event.id, event.pubkey, label, hueOf(event.pubkey), ago(event.createdAt), event.content, photo, source,
+        val authorNpub = npubOf(event.pubkey)
+        val label = names[event.pubkey] ?: shortKey(authorNpub)
+        return PostUi(event.id, event.pubkey, label, authorNpub.takeLast(4), hueOf(event.pubkey), ago(event.createdAt), event.content, photo, source,
             mine = event.pubkey == pubkeyHex, followed = event.pubkey in followed)
     }
 
@@ -434,6 +440,73 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private fun ago(epochSeconds: Long): String {
         val d = (nowSeconds() - epochSeconds).coerceAtLeast(0)
         return when { d < 60 -> "now"; d < 3600 -> "${d / 60} min"; d < 86_400 -> "${d / 3600} h"; else -> "${d / 86_400} d" }
+    }
+
+    private fun npubOf(hex: String) = runCatching {
+        Nip19.encodePublicKey(ByteArray(32) { hex.substring(it * 2, it * 2 + 2).toInt(16).toByte() })
+    }.getOrDefault(hex)
+
+    override fun setName(name: String) {
+        busyAction({ toast = it ?: "Could not save name" }) {
+            val event = io { identity.withSecret { ProfileEvent.sign(it, name, nowSeconds()) } }
+            io { store.saveProfile(event); store.setPendingProfile(Nip01Protocol.toJson(event)) }
+            refreshLists()
+            toast = if (online && publishPendingProfile()) "Name saved and shared." else "Name saved. It's shared with servers when you're online."
+        }
+    }
+
+    /** Sends this phone's latest profile to the relays; true once any relay accepted it. */
+    private suspend fun publishPendingProfile(): Boolean {
+        val wire = store.pendingProfile() ?: return true
+        val event = runCatching { Nip01Protocol.fromJson(wire, ProfileEvent.MAX_BYTES) }.getOrNull() ?: return true
+        val accepted = relays.count { relay -> io { runCatching { relayClient.publish(relay, event) }.getOrDefault("Network error") } == "Accepted" }
+        if (accepted > 0) io { store.setPendingProfile(null) }
+        return accepted > 0
+    }
+
+    private suspend fun syncProfiles() {
+        publishPendingProfile()
+        val authors = posts.map { it.authorKey }.filter { it != pubkeyHex }.distinct().take(50)
+        if (authors.isEmpty()) return
+        for (relay in relays) {
+            val found = io { relayClient.fetchProfiles(relay, authors) }.events
+            io { found.forEach { store.saveProfile(it) } }
+        }
+    }
+
+    override fun createBackup(password: String) {
+        busyAction({ toast = it ?: "Could not create backup" }) {
+            freshBackup = withContext(Dispatchers.Default) { identity.exportEncrypted(password) }
+            io { store.setBackupDone() }
+            backupDone = true
+        }
+    }
+
+    override fun restoreBackup(backup: String, password: String) {
+        busyAction({ toast = it ?: "Could not restore" }) {
+            withContext(Dispatchers.Default) { identity.restoreEncrypted(backup, password) }
+            refreshIdentity()
+            io { store.setBackupDone() }
+            backupDone = true
+            finishOnboarding()
+            refreshLists()
+            toast = "Your ID is restored."
+        }
+    }
+
+    override fun finishOnboarding() {
+        store.setOnboarded()
+        needsOnboarding = false
+        freshBackup = null
+    }
+
+    /** Follows a scanned code: "nostr:npub1…" or a bare npub. */
+    fun followScanned(raw: String?) {
+        val text = raw?.trim()?.removePrefix("nostr:").orEmpty()
+        val key = runCatching { Nip19.decodePublicKey(text).joinToString("") { "%02x".format(it) } }.getOrNull()
+        if (key == null) { toast = "That code isn't a Freegram ID."; return }
+        if (key == pubkeyHex) { toast = "That's your own ID."; return }
+        follow(key)
     }
 
     private fun shortKey(npub: String) = if (npub.length > 16) npub.take(10) + "…" + npub.takeLast(4) else npub
@@ -629,6 +702,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         maintainers = io { store.maintainers() }
         hiddenCount = io { store.hiddenCount() }
         myHideList = io { pubkeyHex.takeIf { it.isNotEmpty() }?.let { store.hideList(it) } }
+        names = io { store.names() }
         val hops = io { store.hopsById() }
         val deliveries = io { store.deliveryStates() }
         val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()

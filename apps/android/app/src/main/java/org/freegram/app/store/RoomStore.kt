@@ -85,6 +85,26 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     /** Relay states of every post that has delivery targets. */
     suspend fun deliveryStates(): Map<String, List<String>> = dao.allDeliveries().groupBy({ it.eventId }, { it.state })
 
+    /** Keeps a verified profile name if it is newer than the one stored for that key. */
+    suspend fun saveProfile(event: BulletinEvent): Boolean {
+        val name = org.freegram.app.protocol.ProfileEvent.nameOf(event) ?: return false
+        return database.withTransaction {
+            val current = dao.profileTime(event.pubkey)
+            if (current != null && current >= event.createdAt) return@withTransaction false
+            dao.setProfile(ProfileRow(event.pubkey, event.createdAt, name))
+            true
+        }
+    }
+
+    suspend fun names(): Map<String, String> = dao.profiles().associate { it.pubkey to it.name }
+
+    /** This phone's latest profile event, kept until a relay has accepted it. */
+    fun pendingProfile(): String? = prefs.getString("pending_profile", null)
+    fun setPendingProfile(wire: String?) { check(prefs.edit().apply { if (wire == null) remove("pending_profile") else putString("pending_profile", wire) }.commit()) }
+
+    fun onboarded(): Boolean = prefs.getBoolean("onboarded", false)
+    fun setOnboarded() { check(prefs.edit().putBoolean("onboarded", true).commit()) }
+
     fun backupDone(): Boolean = prefs.getBoolean("backup_done", false)
     fun setBackupDone() { check(prefs.edit().putBoolean("backup_done", true).commit()) }
 

@@ -62,6 +62,7 @@ import org.freegram.shared.model.FreegramUi
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.PostUi
 import org.freegram.shared.model.SettingsPage
+import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 
 private val Gutter = Modifier.padding(horizontal = 16.dp)
 
@@ -288,15 +289,33 @@ fun NearbyScreen(ui: FreegramUi, platform: PlatformActions) {
 fun ProfileScreen(ui: FreegramUi, platform: PlatformActions, pages: List<SettingsPage>) {
     val c = Fg.colors
     var open by remember { mutableStateOf<SettingsPage?>(null) }
+    var editing by remember { mutableStateOf(false) }
     open?.let { page -> SubPage(page) { open = null }; return }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.size(8.dp))
         Avatar(ui.me.label, ui.me.hue, 72.dp)
-        Text(ui.me.label, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = c.ink)
-        Hint("Share your ID so others can follow you")
+        if (editing) {
+            var name by remember { mutableStateOf(ui.me.name) }
+            OutlinedTextField(name, { name = it.take(40) }, label = { Text("Your name") }, singleLine = true, modifier = Modifier.fillMaxWidth())
+            FgButton("Save name", onClick = { ui.setName(name.trim()); editing = false }, enabled = name.isNotBlank() && !ui.busy)
+        } else {
+            Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(6.dp)) {
+                Text(ui.me.label, fontSize = 22.sp, fontWeight = FontWeight.ExtraBold, color = c.ink)
+                Text("· ${ui.me.tag}", fontSize = 14.sp, color = c.ink3)
+            }
+            Text("Edit name", color = c.teal, fontSize = 13.sp, fontWeight = FontWeight.SemiBold, modifier = Modifier.clickable { editing = true }.padding(4.dp))
+        }
+        Hint("Show this code so others can follow you")
+        val qr = rememberQrCodePainter("nostr:" + ui.me.npub)
+        Box(Modifier.size(200.dp).clip(RoundedCornerShape(16.dp)).background(Color.White).padding(12.dp)) {
+            Image(qr, contentDescription = "QR code with your Freegram ID", modifier = Modifier.fillMaxSize())
+        }
         Text(ui.me.npub, fontSize = 12.sp, color = c.ink2, textAlign = TextAlign.Center)
-        FgButton("Copy my ID", onClick = { platform.copyText("Freegram ID", ui.me.npub) }, secondary = true)
+        Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+            FgButton("Copy my ID", onClick = { platform.copyText("Freegram ID", ui.me.npub) }, secondary = true, modifier = Modifier.weight(1f))
+            FgButton("Scan to follow", onClick = platform.scanToFollow, modifier = Modifier.weight(1f))
+        }
         ListBox {
             pages.firstOrNull { it.title == "Backup and key" }?.let { p ->
                 ListRow(p.title, if (ui.me.backupDone) "✓ Encrypted backup made" else "Not backed up yet", highlight = !ui.me.backupDone) { open = p }

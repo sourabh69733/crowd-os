@@ -34,6 +34,9 @@ import org.freegram.app.protocol.PhotoRef
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
 import org.freegram.shared.ui.FreegramApp
+import com.google.mlkit.vision.barcode.common.Barcode
+import com.google.mlkit.vision.codescanner.GmsBarcodeScannerOptions
+import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 class MainActivity : ComponentActivity() {
     private val model: FreegramViewModel by viewModels()
@@ -59,6 +62,12 @@ private fun FreegramHost(model: FreegramViewModel) {
             copyText = { label, text ->
                 (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
                 model.showToast("Copied.")
+            },
+            scanToFollow = {
+                GmsBarcodeScanning.getClient(context, GmsBarcodeScannerOptions.Builder().setBarcodeFormats(Barcode.FORMAT_QR_CODE).build())
+                    .startScan()
+                    .addOnSuccessListener { model.followScanned(it.rawValue) }
+                    .addOnFailureListener { model.showToast("Scanner unavailable on this phone. Paste the ID in Settings → People you follow.") }
             },
         )
     }

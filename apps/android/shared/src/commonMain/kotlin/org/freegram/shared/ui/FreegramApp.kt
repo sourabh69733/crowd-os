@@ -49,6 +49,10 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
         LaunchedEffect(ui.toast) {
             ui.toast?.let { snackbar.showSnackbar(it); ui.dismissToast() }
         }
+        if (ui.needsOnboarding) {
+            Box(Modifier.fillMaxSize().background(c.paper).padding(top = 24.dp)) { OnboardingFlow(ui, platform) }
+            return@FreegramTheme
+        }
         Scaffold(
             containerColor = c.paper,
             snackbarHost = { SnackbarHost(snackbar) },

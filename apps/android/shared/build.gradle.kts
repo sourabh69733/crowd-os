@@ -20,6 +20,7 @@ kotlin {
             implementation("org.jetbrains.compose.ui:ui:1.12.1")
             implementation("org.jetbrains.compose.ui:ui-backhandler:1.12.1")
             implementation("org.jetbrains.compose.material3:material3:1.9.0")
+            implementation("io.github.alexzhirkevich:qrose:1.3.0")
         }
         commonTest.dependencies {
             implementation(kotlin("test"))

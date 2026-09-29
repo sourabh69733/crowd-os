@@ -12,6 +12,7 @@ import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.protocol.BulletinEvent
 import org.json.JSONObject
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.app.protocol.ProfileEvent
 import org.json.JSONArray
 import java.util.UUID
 import java.util.concurrent.TimeUnit
@@ -92,6 +93,14 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
         return fetchSigned(relay, filter, HideList.MAX_BYTES, maintainers.size * 4) { it.pubkey in wanted && HideList.of(it) != null }
     }
 
+    /** Profile names (kind 0) of [authors]; each is signature-checked. */
+    suspend fun fetchProfiles(relay: String, authors: List<String>): AuthorFetchResult {
+        require(authors.isNotEmpty())
+        val wanted = authors.toSet()
+        val filter = JSONObject().put("kinds", JSONArray().put(ProfileEvent.KIND)).put("authors", JSONArray(authors)).put("limit", authors.size * 2)
+        return fetchSigned(relay, filter, ProfileEvent.MAX_BYTES, authors.size * 3) { it.pubkey in wanted && it.kind == ProfileEvent.KIND }
+    }
+
     /** Gift-wrapped private messages addressed to [recipient]; only the outer signature is checked here. */
     suspend fun fetchWraps(relay: String, recipient: String, limit: Int = 100): AuthorFetchResult {
         val filter = JSONObject().put("kinds", JSONArray().put(PrivateMessages.WRAP_KIND))
@@ -151,7 +160,8 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
         require(
             Nip01Protocol.verifyBulletin(event) ||
                 (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) ||
-                (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES))
+                (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES)) ||
+                ProfileEvent.nameOf(event) != null
         )
         return withTimeoutOrNull(12_000) {
             suspendCancellableCoroutine { continuation ->
