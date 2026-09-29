@@ -1,9 +1,11 @@
 package org.freegram.app
 
+import android.app.Activity
 import android.content.ClipData
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
+import android.view.WindowManager
 import androidx.activity.ComponentActivity
 import androidx.activity.compose.rememberLauncherForActivityResult
 import androidx.activity.compose.setContent
@@ -24,9 +26,6 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
-import org.freegram.app.feed.FollowedFeedSection
-import org.freegram.app.identity.IdentitySection
-import org.freegram.app.moderation.ModerationSection
 import org.freegram.app.nearby.nearbyPermissions
 import org.freegram.app.nearby.optionalNearbyPermissions
 import org.freegram.app.protocol.Nip01Protocol
@@ -69,113 +68,16 @@ private fun FreegramHost(model: FreegramViewModel) {
                     .addOnSuccessListener { model.followScanned(it.rawValue) }
                     .addOnFailureListener { model.showToast("Scanner unavailable on this phone. Paste the ID in Settings → People you follow.") }
             },
+            setSecureScreen = { on ->
+                val window = (context as Activity).window
+                if (on) window.addFlags(WindowManager.LayoutParams.FLAG_SECURE) else window.clearFlags(WindowManager.LayoutParams.FLAG_SECURE)
+            },
         )
     }
     val pages = remember {
-        listOf(
-            SettingsPage("Backup and key", "Encrypted backup, restore, replace a stolen key") { BackupPage(model) },
-            SettingsPage("People you follow", "Follow by ID, mute, block") { FollowPage(model) },
-            SettingsPage("Maintainers", "Who can hide posts for you · reports and appeals") { ModerationPage(model) },
-            SettingsPage("Servers", "Relays your posts go to") { ServersPage(model) },
-            SettingsPage("Developer tools", "Raw post data, bridge test, fetch by ID") { DeveloperPage(model) },
-        )
+        listOf(SettingsPage("Developer tools", "Raw post data, bridge test, fetch by ID") { DeveloperPage(model) })
     }
     FreegramApp(model, platform, pages)
-}
-
-@Composable
-private fun BackupPage(model: FreegramViewModel) {
-    val context = LocalContext.current
-    val enabled = model.ready && !model.busy
-    IdentitySection(
-        npub = model.npub,
-        pubkeyHex = model.pubkeyHex,
-        revealedBackup = model.revealedBackup,
-        restoreInput = model.restoreInput,
-        onRestoreInputChange = model::changeRestoreInput,
-        confirmingRestore = model.confirmingRestore,
-        confirmingReplace = model.confirmingReplace,
-        message = model.identityMessage,
-        enabled = enabled,
-        onReveal = { model.revealBackup() },
-        onHide = model::hideBackup,
-        onRestore = model::restore,
-        onReplace = model::replaceKey,
-        onCancelConfirm = model::cancelConfirm,
-        backupPassword = model.backupPassword,
-        onBackupPasswordChange = { model.backupPassword = it },
-        backupPasswordConfirm = model.backupPasswordConfirm,
-        onBackupPasswordConfirmChange = { model.backupPasswordConfirm = it },
-        encryptedBackup = model.encryptedBackup,
-        onCreateEncrypted = { model.createEncryptedBackup() },
-        onCopyEncrypted = { backup ->
-            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-            val clip = ClipData.newPlainText("Freegram encrypted key backup", backup)
-            // Keep it out of clipboard previews; it is encrypted, but still worth not displaying.
-            clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
-            clipboard.setPrimaryClip(clip)
-            model.showToast("Encrypted backup copied.")
-        },
-        restorePassword = model.restorePassword,
-        onRestorePasswordChange = { model.restorePassword = it },
-    )
-}
-
-@Composable
-private fun FollowPage(model: FreegramViewModel) {
-    val enabled = model.ready && !model.busy
-    FollowedFeedSection(
-        authorInput = model.authorInput,
-        onAuthorInputChange = { model.authorInput = it },
-        policies = model.authorPolicies,
-        events = model.feedEvents,
-        relayResults = model.feedRelayResults,
-        message = model.feedMessage,
-        enabled = enabled,
-        onFollow = { model.follow() },
-        onChangeState = { pubkey, state -> model.setAuthorState(pubkey, state) },
-        onRemove = { model.removeAuthor(it) },
-        onRefresh = { model.refreshFeed() },
-        onOpen = { model.open(it) },
-    )
-}
-
-@Composable
-private fun ModerationPage(model: FreegramViewModel) {
-    val enabled = model.ready && !model.busy
-    ModerationSection(
-        maintainers = model.maintainers,
-        myKey = model.pubkeyHex,
-        input = model.maintainerInput,
-        onInputChange = { model.maintainerInput = it },
-        hiddenCount = model.hiddenCount,
-        myList = model.myHideList,
-        message = model.moderationMessage,
-        enabled = enabled,
-        onAdd = { model.addMaintainer() },
-        onToggle = { key, on -> model.setMaintainerEnabled(key, on) },
-        onRemove = { model.removeMaintainer(it) },
-        onRefresh = { model.refreshHideLists() },
-        onUnhidePost = { model.unhidePost(it) },
-        onUnhideAuthor = { model.unhideAuthor(it) },
-        appealText = model.appealText,
-        onAppealTextChange = { model.appealText = it },
-        appealPostId = model.appealPostId,
-        onAppealPostIdChange = { model.appealPostId = it },
-        onAppeal = { model.sendAppeal(it) },
-        inbox = model.inbox,
-        onCheckInbox = { model.checkInbox() },
-        onHideReported = { model.hidePost(it) },
-    )
-}
-
-@Composable
-private fun ServersPage(model: FreegramViewModel) {
-    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Text("Your posts go to both servers. Change them only if your group runs its own relays. Addresses are saved the next time you post.")
-        OutlinedTextField(value = model.firstRelay, onValueChange = { model.firstRelay = it }, label = { Text("Relay 1") }, modifier = Modifier.fillMaxWidth())
-        OutlinedTextField(value = model.secondRelay, onValueChange = { model.secondRelay = it }, label = { Text("Relay 2") }, modifier = Modifier.fillMaxWidth())
-    }
 }
 
 /** The original test screen, kept for debugging: raw IDs, per-relay states, bridge test and fetch by ID. */

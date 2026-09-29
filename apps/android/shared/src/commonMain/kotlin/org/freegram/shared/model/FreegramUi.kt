@@ -52,6 +52,49 @@ data class NearbyUi(
 
 data class MeUi(val label: String, val name: String, val npub: String, val tag: String, val hue: Float, val backupDone: Boolean)
 
+data class PersonUi(val key: String, val label: String, val tag: String, val hue: Float, val state: PersonState)
+enum class PersonState { Following, Muted, Blocked }
+
+data class MaintainerUi(val key: String, val label: String, val tag: String, val hue: Float, val enabled: Boolean, val isMe: Boolean)
+
+data class InboxItemUi(val isReport: Boolean, val fromLabel: String, val reason: String, val note: String, val postId: String?, val time: String, val alreadyHidden: Boolean)
+
+data class StorageUi(val posts: Int, val maxPosts: Int, val photoBytes: Long, val maxPhotoBytes: Long, val hiddenByMaintainers: Int)
+
+/**
+ * Settings screens: people, maintainers, reports, servers, storage and key management.
+ * Part of [FreegramUi]; split out only to keep each list readable.
+ */
+interface SettingsUi {
+    val people: List<PersonUi>
+    val maintainerList: List<MaintainerUi>
+    val myHiddenPosts: List<String>
+    val myHiddenAuthors: List<PersonUi>
+    val inboxList: List<InboxItemUi>
+    val storageInfo: StorageUi
+    val relayUrls: List<String>
+    /** The plain secret key while the user has chosen to show it; null otherwise. */
+    val plainKey: String?
+
+    fun followId(text: String)
+    fun unfollow(key: String)
+    fun unmute(key: String)
+    fun unblock(key: String)
+    fun addMaintainerId(text: String)
+    fun setMaintainerOn(key: String, on: Boolean)
+    fun dropMaintainer(key: String)
+    fun refreshMaintainers()
+    fun appeal(maintainer: String, text: String, postId: String)
+    fun loadInbox()
+    fun hideReported(postId: String)
+    fun unhidePostId(id: String)
+    fun unhideAuthorKey(key: String)
+    fun saveRelays(first: String, second: String)
+    fun revealPlainKey()
+    fun hidePlainKey()
+    fun replaceKeyNow()
+}
+
 /** A page reached from Settings. Its content comes from the platform app. */
 class SettingsPage(val title: String, val subtitle: String, val content: @Composable () -> Unit)
 
@@ -59,7 +102,7 @@ class SettingsPage(val title: String, val subtitle: String, val content: @Compos
  * Everything the shared screens show and can do. The Android app implements it with real storage,
  * keys, relays and nearby radio; an iOS app would implement the same interface.
  */
-interface FreegramUi {
+interface FreegramUi : SettingsUi {
     val ready: Boolean
     val busy: Boolean
     val online: Boolean
@@ -105,4 +148,6 @@ class PlatformActions(
     val copyText: (label: String, text: String) -> Unit,
     /** Opens the camera code scanner; a scanned Freegram ID is followed. */
     val scanToFollow: () -> Unit,
+    /** Blocks screenshots and the recent-apps preview while a secret is on screen. */
+    val setSecureScreen: (Boolean) -> Unit,
 )

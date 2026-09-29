@@ -11,7 +11,7 @@ fun sha256Hex(bytes: ByteArray): String =
  * Photos on this phone, one file per SHA-256. Bytes are stored only after their hash matches,
  * so a file's name always proves its content. Total size is capped.
  */
-class MediaStore(private val dir: File, private val maxTotalBytes: Long = 50L * 1024 * 1024) {
+class MediaStore(private val dir: File, private val maxTotalBytes: Long = MAX_BYTES) {
     init { dir.mkdirs() }
 
     private fun file(sha: String): File {
@@ -60,6 +60,7 @@ class MediaStore(private val dir: File, private val maxTotalBytes: Long = 50L * 
     }
 
     companion object {
+        const val MAX_BYTES = 50L * 1024 * 1024
         @Volatile private var shared: MediaStore? = null
 
         /** One instance per process, shared by the screen and the nearby service. */

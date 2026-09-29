@@ -83,7 +83,7 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
                     tab == Tab.Nearby -> NearbyScreen(ui, platform)
                     tab == Tab.Compose -> ComposeScreen(ui, platform, onDone = { tab = Tab.Home })
                     tab == Tab.Profile -> ProfileScreen(ui, platform, settingsPages)
-                    tab == Tab.Settings -> SettingsScreen(settingsPages)
+                    tab == Tab.Settings -> SettingsScreen(ui, platform, settingsPages)
                 }
             }
         }

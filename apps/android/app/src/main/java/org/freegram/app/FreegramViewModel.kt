@@ -43,7 +43,12 @@ import org.freegram.app.store.AuthorPolicy
 import org.freegram.app.store.AuthorState
 import org.freegram.app.store.RoomStore
 import org.freegram.shared.model.FreegramUi
+import org.freegram.shared.model.InboxItemUi
+import org.freegram.shared.model.MaintainerUi
 import org.freegram.shared.model.MeUi
+import org.freegram.shared.model.PersonState
+import org.freegram.shared.model.PersonUi
+import org.freegram.shared.model.StorageUi
 import org.freegram.shared.model.NearbyActivity
 import org.freegram.shared.model.NearbyUi
 import org.freegram.shared.model.PhotoUi
@@ -144,6 +149,29 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         nearbyRunning, nearbyStatus, nearbyCounts.first, nearbyCounts.second, nearbyCounts.third,
         nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge,
     )
+    private var photoBytes by mutableStateOf(0L)
+
+    // ----- Settings screens (SettingsUi) -----
+    override val people: List<PersonUi> get() = authorPolicies.map { p ->
+        personOf(p.pubkey, when (p.state) {
+            AuthorState.FOLLOWING -> PersonState.Following
+            AuthorState.MUTED -> PersonState.Muted
+            AuthorState.BLOCKED -> PersonState.Blocked
+        })
+    }
+    override val maintainerList: List<MaintainerUi> get() = maintainers.map {
+        MaintainerUi(it.pubkey, labelOf(it.pubkey), npubOf(it.pubkey).takeLast(4), hueOf(it.pubkey), it.enabled, it.pubkey == pubkeyHex)
+    }
+    override val myHiddenPosts: List<String> get() = myHideList?.posts?.sorted().orEmpty()
+    override val myHiddenAuthors: List<PersonUi> get() = myHideList?.authors?.sorted()?.map { personOf(it, PersonState.Blocked) }.orEmpty()
+    override val inboxList: List<InboxItemUi> get() = inbox.map { m ->
+        InboxItemUi(m.type == ModerationMessage.Type.REPORT, labelOf(m.from), m.reason, m.note, m.postId, ago(m.createdAt),
+            alreadyHidden = m.postId != null && myHideList?.posts?.contains(m.postId) == true)
+    }
+    override val storageInfo: StorageUi get() = StorageUi(savedEvents.size, RoomStore.MAX_BULLETINS, photoBytes, MediaStore.MAX_BYTES, hiddenCount)
+    override val relayUrls: List<String> get() = relays
+    override val plainKey: String? get() = revealedBackup
+
     private val thumbnails = HashMap<String, ImageBitmap>()
     private val connectivity = application.getSystemService(ConnectivityManager::class.java)
     private val networkCallback = object : ConnectivityManager.NetworkCallback() {
@@ -402,6 +430,134 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     override fun setNearby(on: Boolean) { if (on) startNearby() else stopNearby() }
     override fun setAutoPublish(on: Boolean) = changeAutoBridge(on)
+
+    // ----- Settings actions -----
+
+    override fun followId(text: String) {
+        val key = runCatching { parseKey(text) }.getOrNull()
+        when {
+            key == null || key.length != 64 -> toast = "That isn't a valid Freegram ID."
+            key == pubkeyHex -> toast = "That's your own ID."
+            else -> follow(key)
+        }
+    }
+
+    override fun unfollow(key: String) = removePolicy(key, "Unfollowed.")
+    override fun unblock(key: String) = removePolicy(key, "Unblocked.")
+    override fun unmute(key: String) = changePolicy(key, AuthorState.FOLLOWING, "Unmuted. You follow them again.")
+
+    private fun removePolicy(key: String, done: String) {
+        busyAction({ toast = it ?: "Could not update" }) {
+            io { store.removeAuthor(key) }
+            refreshLists()
+            toast = done
+        }
+    }
+
+    override fun addMaintainerId(text: String) {
+        busyAction({ toast = it ?: "Could not add maintainer" }) {
+            io { store.setMaintainer(parseKey(text), true) }
+            if (online) syncHideLists()
+            refreshLists()
+            toast = "Maintainer added. Their hide list now applies on this phone."
+        }
+    }
+
+    override fun setMaintainerOn(key: String, on: Boolean) {
+        busyAction({ toast = it ?: "Could not update" }) {
+            io { store.setMaintainer(key, on) }
+            refreshLists()
+            toast = if (on) "Maintainer on." else "Maintainer off. Posts they hid show again."
+        }
+    }
+
+    override fun dropMaintainer(key: String) {
+        busyAction({ toast = it ?: "Could not remove" }) {
+            io { store.removeMaintainer(key) }
+            refreshLists()
+            toast = "Maintainer removed."
+        }
+    }
+
+    override fun refreshMaintainers() {
+        busyAction({ toast = it ?: "Could not refresh" }) {
+            require(online) { "No internet. Hide lists refresh when you're online." }
+            syncHideLists()
+            refreshLists()
+            toast = "Hide lists updated."
+        }
+    }
+
+    override fun appeal(maintainer: String, text: String, postId: String) {
+        busyAction({ toast = it ?: "Appeal failed" }) {
+            val id = postId.trim().lowercase().takeIf { it.isNotEmpty() }
+            require(id == null || (id.length == 64 && id.all { it in '0'..'9' || it in 'a'..'f' })) { "Post ID must be 64 characters (0-9, a-f)" }
+            require(text.isNotBlank()) { "Write why the decision should change" }
+            sendPrivate(listOf(maintainer), ModerationMessage(ModerationMessage.Type.APPEAL, pubkeyHex, nowSeconds(), id, "appeal", text.trim()))
+            toast = "Appeal sent privately."
+        }
+    }
+
+    override fun loadInbox() {
+        busyAction({ toast = it ?: "Could not check messages" }) {
+            require(online) { "No internet. Check again when you're online." }
+            val wraps = relays.flatMap { relay -> io { relayClient.fetchWraps(relay, pubkeyHex) }.events }.distinctBy { it.id }
+            val opened = io { identity.withSecret { secret -> wraps.mapNotNull { PrivateMessages.unwrap(secret, it) } } }
+            inbox = opened.distinctBy { listOf(it.from, it.createdAt, it.postId, it.reason, it.note) }.sortedByDescending { it.createdAt }
+            toast = if (inbox.isEmpty()) "No reports or appeals." else "${inbox.size} reports and appeals."
+        }
+    }
+
+    override fun hideReported(postId: String) {
+        busyAction({ toast = it ?: "Could not hide" }) {
+            editMyHideList { it.copy(posts = it.posts + postId) }
+            refreshLists()
+            toast = "Hidden for everyone who follows you as a maintainer."
+        }
+    }
+
+    override fun unhidePostId(id: String) {
+        busyAction({ toast = it ?: "Could not unhide" }) {
+            editMyHideList { it.copy(posts = it.posts - id) }
+            refreshLists()
+            toast = "Post unhidden."
+        }
+    }
+
+    override fun unhideAuthorKey(key: String) {
+        busyAction({ toast = it ?: "Could not unhide" }) {
+            editMyHideList { it.copy(authors = it.authors - key) }
+            refreshLists()
+            toast = "Person unhidden."
+        }
+    }
+
+    override fun saveRelays(first: String, second: String) {
+        runCatching {
+            store.setRelayUrl(0, first.trim())
+            store.setRelayUrl(1, second.trim())
+            firstRelay = first.trim()
+            secondRelay = second.trim()
+        }.onSuccess { toast = "Servers saved. New posts go to these servers." }
+            .onFailure { toast = "Server addresses must start with wss://" }
+    }
+
+    override fun revealPlainKey() { revealBackup() }
+    override fun hidePlainKey() = hideBackup()
+
+    override fun replaceKeyNow() {
+        busyAction({ toast = it ?: "Could not make a new ID" }) {
+            io { identity.replaceWithNewKey(); store.setBackupDone(false) }
+            revealedBackup = null
+            backupDone = false
+            refreshIdentity()
+            refreshLists()
+            toast = "New ID made. Back it up now and share your new ID."
+        }
+    }
+
+    private fun personOf(key: String, state: PersonState) = PersonUi(key, labelOf(key), npubOf(key).takeLast(4), hueOf(key), state)
+    private fun labelOf(key: String) = names[key] ?: shortKey(npubOf(key))
 
     override fun onCleared() { runCatching { connectivity.unregisterNetworkCallback(networkCallback) } }
 
@@ -703,6 +859,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         hiddenCount = io { store.hiddenCount() }
         myHideList = io { pubkeyHex.takeIf { it.isNotEmpty() }?.let { store.hideList(it) } }
         names = io { store.names() }
+        photoBytes = io { media.totalBytes() }
         val hops = io { store.hopsById() }
         val deliveries = io { store.deliveryStates() }
         val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()

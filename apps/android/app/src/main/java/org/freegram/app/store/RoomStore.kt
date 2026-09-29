@@ -106,7 +106,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     fun setOnboarded() { check(prefs.edit().putBoolean("onboarded", true).commit()) }
 
     fun backupDone(): Boolean = prefs.getBoolean("backup_done", false)
-    fun setBackupDone() { check(prefs.edit().putBoolean("backup_done", true).commit()) }
+    fun setBackupDone(done: Boolean = true) { check(prefs.edit().putBoolean("backup_done", done).commit()) }
 
     /** Removes this phone's copy and any queued relay delivery. Copies on relays or other phones are unaffected. */
     suspend fun deleteLocal(eventId: String) = database.withTransaction {

@@ -59,18 +59,19 @@ import androidx.compose.ui.text.style.TextAlign
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
 import org.freegram.shared.model.FreegramUi
+import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.PostUi
 import org.freegram.shared.model.SettingsPage
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 
-private val Gutter = Modifier.padding(horizontal = 16.dp)
+internal val Gutter = Modifier.padding(horizontal = 16.dp)
 
 @Composable
-private fun Title(text: String) = Text(text, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Fg.colors.ink)
+internal fun Title(text: String) = Text(text, fontSize = 26.sp, fontWeight = FontWeight.ExtraBold, color = Fg.colors.ink)
 
 @Composable
-private fun Hint(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Start) =
+internal fun Hint(text: String, modifier: Modifier = Modifier, align: TextAlign = TextAlign.Start) =
     Text(text, fontSize = 13.sp, color = Fg.colors.ink3, modifier = modifier, textAlign = align)
 
 // ---------- Home ----------
@@ -288,9 +289,9 @@ fun NearbyScreen(ui: FreegramUi, platform: PlatformActions) {
 @Composable
 fun ProfileScreen(ui: FreegramUi, platform: PlatformActions, pages: List<SettingsPage>) {
     val c = Fg.colors
-    var open by remember { mutableStateOf<SettingsPage?>(null) }
+    var open by remember { mutableStateOf<SettingsDest?>(null) }
     var editing by remember { mutableStateOf(false) }
-    open?.let { page -> SubPage(page) { open = null }; return }
+    open?.let { dest -> SettingsDestination(ui, platform, dest) { open = null }; return }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
         Spacer(Modifier.size(8.dp))
@@ -317,48 +318,20 @@ fun ProfileScreen(ui: FreegramUi, platform: PlatformActions, pages: List<Setting
             FgButton("Scan to follow", onClick = platform.scanToFollow, modifier = Modifier.weight(1f))
         }
         ListBox {
-            pages.firstOrNull { it.title == "Backup and key" }?.let { p ->
-                ListRow(p.title, if (ui.me.backupDone) "✓ Encrypted backup made" else "Not backed up yet", highlight = !ui.me.backupDone) { open = p }
-            }
-            pages.firstOrNull { it.title == "People you follow" }?.let { p -> ListRow(p.title, p.subtitle) { open = p } }
+            ListRow("Backup and key", if (ui.me.backupDone) "✓ Encrypted backup made" else "Not backed up yet", highlight = !ui.me.backupDone) { open = SettingsDest.Backup }
+            ListRow("People you follow", "${ui.people.count { it.state == PersonState.Following }} following") { open = SettingsDest.People }
         }
     }
 }
 
-// ---------- Settings ----------
-
 @Composable
-fun SettingsScreen(pages: List<SettingsPage>) {
-    var open by remember { mutableStateOf<SettingsPage?>(null) }
-    open?.let { page -> SubPage(page) { open = null }; return }
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.size(8.dp)); Title("Settings")
-        ListBox { pages.forEach { p -> ListRow(p.title, p.subtitle) { open = p } } }
-        Hint("Freegram prototype · not for safety-critical use yet.")
-    }
-}
-
-@Composable
-private fun SubPage(page: SettingsPage, onBack: () -> Unit) {
-    val c = Fg.colors
-    SystemBack(onBack = onBack)
-    Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Row(verticalAlignment = Alignment.CenterVertically) {
-            IconButton(onClick = onBack) { Icon(FgIcons.Back, contentDescription = "Back", tint = c.ink) }
-            Text(page.title, fontWeight = FontWeight.SemiBold, color = c.ink)
-        }
-        page.content()
-    }
-}
-
-@Composable
-private fun ListBox(content: @Composable () -> Unit) {
+internal fun ListBox(content: @Composable () -> Unit) {
     val c = Fg.colors
     Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(14.dp))) { content() }
 }
 
 @Composable
-private fun ListRow(title: String, subtitle: String, highlight: Boolean = false, onClick: () -> Unit) {
+internal fun ListRow(title: String, subtitle: String, highlight: Boolean = false, onClick: () -> Unit) {
     val c = Fg.colors
     Row(Modifier.fillMaxWidth().clickable(onClick = onClick).padding(14.dp), verticalAlignment = Alignment.CenterVertically) {
         Column(Modifier.weight(1f)) {
@@ -373,4 +346,4 @@ private fun ListRow(title: String, subtitle: String, highlight: Boolean = false,
 /** Handles the phone's Back button/gesture so it steps back inside the app instead of closing it. */
 @OptIn(ExperimentalComposeUiApi::class)
 @Composable
-private fun SystemBack(onBack: () -> Unit) = BackHandler(enabled = true, onBack = onBack)
+internal fun SystemBack(onBack: () -> Unit) = BackHandler(enabled = true, onBack = onBack)
