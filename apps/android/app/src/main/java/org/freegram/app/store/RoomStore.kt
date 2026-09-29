@@ -79,6 +79,15 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     suspend fun hasBulletin(eventId: String): Boolean = dao.hasBulletin(eventId)
 
+    /** Nearby transfer count of each stored post (0 = authored here or fetched from a relay). */
+    suspend fun hopsById(): Map<String, Int> = dao.allHops().associate { it.id to it.hops }
+
+    /** Relay states of every post that has delivery targets. */
+    suspend fun deliveryStates(): Map<String, List<String>> = dao.allDeliveries().groupBy({ it.eventId }, { it.state })
+
+    fun backupDone(): Boolean = prefs.getBoolean("backup_done", false)
+    fun setBackupDone() { check(prefs.edit().putBoolean("backup_done", true).commit()) }
+
     /** Removes this phone's copy and any queued relay delivery. Copies on relays or other phones are unaffected. */
     suspend fun deleteLocal(eventId: String) = database.withTransaction {
         dao.deleteDeliveries(eventId)

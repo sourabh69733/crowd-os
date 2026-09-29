@@ -34,6 +34,7 @@ kotlin {
 ksp { arg("room.schemaLocation", "$projectDir/schemas") }
 
 dependencies {
+    implementation(project(":shared"))
     implementation("androidx.activity:activity-compose:1.9.0")
     implementation("androidx.compose.ui:ui:1.9.0")
     implementation("androidx.compose.material3:material3:1.4.0")

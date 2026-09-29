@@ -5,81 +5,178 @@ import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
 import androidx.activity.ComponentActivity
-import androidx.activity.compose.setContent
-import androidx.activity.viewModels
 import androidx.activity.compose.rememberLauncherForActivityResult
+import androidx.activity.compose.setContent
 import androidx.activity.result.PickVisualMediaRequest
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.activity.viewModels
 import androidx.compose.foundation.Image
-import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
-import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
-import androidx.compose.foundation.layout.padding
-import androidx.compose.foundation.rememberScrollState
-import androidx.compose.foundation.verticalScroll
+import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
 import androidx.compose.material3.MaterialTheme
 import androidx.compose.material3.OutlinedTextField
 import androidx.compose.material3.Text
 import androidx.compose.runtime.Composable
+import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
 import org.freegram.app.feed.FollowedFeedSection
 import org.freegram.app.identity.IdentitySection
 import org.freegram.app.moderation.ModerationSection
-import org.freegram.app.nearby.NearbySection
+import org.freegram.app.nearby.nearbyPermissions
+import org.freegram.app.nearby.optionalNearbyPermissions
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.PhotoRef
+import org.freegram.shared.model.PlatformActions
+import org.freegram.shared.model.SettingsPage
+import org.freegram.shared.ui.FreegramApp
 
 class MainActivity : ComponentActivity() {
     private val model: FreegramViewModel by viewModels()
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
-        setContent { FreegramScreen(model) }
+        setContent { FreegramHost(model) }
     }
 }
 
+/** Connects the shared screens to Android: photo picker, permissions, clipboard, and the Settings pages. */
 @Composable
-private fun FreegramScreen(model: FreegramViewModel) {
+private fun FreegramHost(model: FreegramViewModel) {
+    val context = LocalContext.current
+    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickPhoto) }
+    val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
+        if (nearbyPermissions().all { granted[it] == true }) model.startNearby() else model.nearbyPermissionDenied()
+    }
+    val platform = remember {
+        PlatformActions(
+            pickPhoto = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            startNearby = { permissions.launch(nearbyPermissions() + optionalNearbyPermissions()) },
+            copyText = { label, text ->
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
+                model.showToast("Copied.")
+            },
+        )
+    }
+    val pages = remember {
+        listOf(
+            SettingsPage("Backup and key", "Encrypted backup, restore, replace a stolen key") { BackupPage(model) },
+            SettingsPage("People you follow", "Follow by ID, mute, block") { FollowPage(model) },
+            SettingsPage("Maintainers", "Who can hide posts for you · reports and appeals") { ModerationPage(model) },
+            SettingsPage("Servers", "Relays your posts go to") { ServersPage(model) },
+            SettingsPage("Developer tools", "Raw post data, bridge test, fetch by ID") { DeveloperPage(model) },
+        )
+    }
+    FreegramApp(model, platform, pages)
+}
+
+@Composable
+private fun BackupPage(model: FreegramViewModel) {
     val context = LocalContext.current
     val enabled = model.ready && !model.busy
-    val draftBytes = model.draft.toByteArray(Charsets.UTF_8).size
-    val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickPhoto) }
+    IdentitySection(
+        npub = model.npub,
+        pubkeyHex = model.pubkeyHex,
+        revealedBackup = model.revealedBackup,
+        restoreInput = model.restoreInput,
+        onRestoreInputChange = model::changeRestoreInput,
+        confirmingRestore = model.confirmingRestore,
+        confirmingReplace = model.confirmingReplace,
+        message = model.identityMessage,
+        enabled = enabled,
+        onReveal = { model.revealBackup() },
+        onHide = model::hideBackup,
+        onRestore = model::restore,
+        onReplace = model::replaceKey,
+        onCancelConfirm = model::cancelConfirm,
+        backupPassword = model.backupPassword,
+        onBackupPasswordChange = { model.backupPassword = it },
+        backupPasswordConfirm = model.backupPasswordConfirm,
+        onBackupPasswordConfirmChange = { model.backupPasswordConfirm = it },
+        encryptedBackup = model.encryptedBackup,
+        onCreateEncrypted = { model.createEncryptedBackup() },
+        onCopyEncrypted = { backup ->
+            val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
+            val clip = ClipData.newPlainText("Freegram encrypted key backup", backup)
+            // Keep it out of clipboard previews; it is encrypted, but still worth not displaying.
+            clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
+            clipboard.setPrimaryClip(clip)
+            model.showToast("Encrypted backup copied.")
+        },
+        restorePassword = model.restorePassword,
+        onRestorePasswordChange = { model.restorePassword = it },
+    )
+}
 
-    MaterialTheme {
-        Column(
-            modifier = Modifier.fillMaxSize().verticalScroll(rememberScrollState()).padding(20.dp),
-            verticalArrangement = Arrangement.spacedBy(12.dp),
-        ) {
-            Text("Freegram prototype", style = MaterialTheme.typography.headlineMedium)
-            Text("Public text bulletins. Anyone who gets a signed post can copy it. Nearby sharing is experimental and not yet tested between real phones; do not rely on this prototype for safety-critical communication.")
-            OutlinedTextField(
-                value = model.draft,
-                onValueChange = { model.draft = it },
-                enabled = model.ready,
-                label = { Text("Bulletin draft") },
-                modifier = Modifier.fillMaxWidth(),
-                minLines = 4,
-            )
-            Text("$draftBytes/2048 UTF-8 bytes")
-            model.pickedPreview?.let { preview ->
-                Image(bitmap = preview, contentDescription = "Photo to post", modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp))
-                Button(enabled = enabled, onClick = model::removePhoto) { Text("Remove photo") }
-            } ?: Button(enabled = enabled, onClick = {
-                photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly))
-            }) { Text("Add photo") }
-            Button(enabled = enabled, onClick = { model.saveDraft() }) { Text("Save draft") }
-            Button(enabled = enabled && (model.draft.isNotBlank() || model.pickedPhoto != null) && draftBytes <= 2048, onClick = { model.publish() }) {
-                Text(if (model.busy) "Working…" else "Sign, save, and send")
-            }
-            OutlinedTextField(value = model.firstRelay, onValueChange = { model.firstRelay = it }, label = { Text("Relay 1") }, modifier = Modifier.fillMaxWidth())
-            OutlinedTextField(value = model.secondRelay, onValueChange = { model.secondRelay = it }, label = { Text("Relay 2") }, modifier = Modifier.fillMaxWidth())
-            if (model.message.isNotEmpty()) Text(model.message)
-            model.selected?.let { saved ->
+@Composable
+private fun FollowPage(model: FreegramViewModel) {
+    val enabled = model.ready && !model.busy
+    FollowedFeedSection(
+        authorInput = model.authorInput,
+        onAuthorInputChange = { model.authorInput = it },
+        policies = model.authorPolicies,
+        events = model.feedEvents,
+        relayResults = model.feedRelayResults,
+        message = model.feedMessage,
+        enabled = enabled,
+        onFollow = { model.follow() },
+        onChangeState = { pubkey, state -> model.setAuthorState(pubkey, state) },
+        onRemove = { model.removeAuthor(it) },
+        onRefresh = { model.refreshFeed() },
+        onOpen = { model.open(it) },
+    )
+}
+
+@Composable
+private fun ModerationPage(model: FreegramViewModel) {
+    val enabled = model.ready && !model.busy
+    ModerationSection(
+        maintainers = model.maintainers,
+        myKey = model.pubkeyHex,
+        input = model.maintainerInput,
+        onInputChange = { model.maintainerInput = it },
+        hiddenCount = model.hiddenCount,
+        myList = model.myHideList,
+        message = model.moderationMessage,
+        enabled = enabled,
+        onAdd = { model.addMaintainer() },
+        onToggle = { key, on -> model.setMaintainerEnabled(key, on) },
+        onRemove = { model.removeMaintainer(it) },
+        onRefresh = { model.refreshHideLists() },
+        onUnhidePost = { model.unhidePost(it) },
+        onUnhideAuthor = { model.unhideAuthor(it) },
+        appealText = model.appealText,
+        onAppealTextChange = { model.appealText = it },
+        appealPostId = model.appealPostId,
+        onAppealPostIdChange = { model.appealPostId = it },
+        onAppeal = { model.sendAppeal(it) },
+        inbox = model.inbox,
+        onCheckInbox = { model.checkInbox() },
+        onHideReported = { model.hidePost(it) },
+    )
+}
+
+@Composable
+private fun ServersPage(model: FreegramViewModel) {
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        Text("Your posts go to both servers. Change them only if your group runs its own relays. Addresses are saved the next time you post.")
+        OutlinedTextField(value = model.firstRelay, onValueChange = { model.firstRelay = it }, label = { Text("Relay 1") }, modifier = Modifier.fillMaxWidth())
+        OutlinedTextField(value = model.secondRelay, onValueChange = { model.secondRelay = it }, label = { Text("Relay 2") }, modifier = Modifier.fillMaxWidth())
+    }
+}
+
+/** The original test screen, kept for debugging: raw IDs, per-relay states, bridge test and fetch by ID. */
+@Composable
+private fun DeveloperPage(model: FreegramViewModel) {
+    val context = LocalContext.current
+    val enabled = model.ready && !model.busy
+    Column(verticalArrangement = Arrangement.spacedBy(12.dp)) {
+        if (model.message.isNotEmpty()) Text(model.message)
+            model.devSelected?.let { saved ->
                 Text("Selected saved bulletin", style = MaterialTheme.typography.titleMedium)
                 Text(saved.content)
                 model.selectedPhoto?.let { Image(bitmap = it, contentDescription = "Post photo", modifier = Modifier.fillMaxWidth().heightIn(max = 480.dp)) }
@@ -124,31 +221,6 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 }
                 if (model.confirmingDelete) Button(onClick = model::cancelDelete) { Text("Cancel") }
             }
-            FollowedFeedSection(
-                authorInput = model.authorInput,
-                onAuthorInputChange = { model.authorInput = it },
-                policies = model.authorPolicies,
-                events = model.feedEvents,
-                relayResults = model.feedRelayResults,
-                message = model.feedMessage,
-                enabled = enabled,
-                onFollow = { model.follow() },
-                onChangeState = { pubkey, state -> model.setAuthorState(pubkey, state) },
-                onRemove = { model.removeAuthor(it) },
-                onRefresh = { model.refreshFeed() },
-                onOpen = { model.open(it) },
-            )
-            NearbySection(
-                running = model.nearbyRunning,
-                status = model.nearbyStatus,
-                log = model.nearbyLog,
-                enabled = model.ready,
-                autoBridge = model.autoBridge,
-                onAutoBridgeChange = model::changeAutoBridge,
-                onStart = model::startNearby,
-                onStop = model::stopNearby,
-                onPermissionDenied = model::nearbyPermissionDenied,
-            )
             Text("Bridge test", style = MaterialTheme.typography.titleMedium)
             Text("Only paste a signed event copied from another phone here. For a new plain-text post, use Bulletin draft above.")
             OutlinedTextField(
@@ -179,62 +251,5 @@ private fun FreegramScreen(model: FreegramViewModel) {
                 Text("Author key: ${saved.pubkey.take(16)}…")
                 Button(enabled = enabled, onClick = { model.open(saved) }) { Text("Open ${saved.id.take(12)}…") }
             }
-            ModerationSection(
-                maintainers = model.maintainers,
-                myKey = model.pubkeyHex,
-                input = model.maintainerInput,
-                onInputChange = { model.maintainerInput = it },
-                hiddenCount = model.hiddenCount,
-                myList = model.myHideList,
-                message = model.moderationMessage,
-                enabled = enabled,
-                onAdd = { model.addMaintainer() },
-                onToggle = { key, on -> model.setMaintainerEnabled(key, on) },
-                onRemove = { model.removeMaintainer(it) },
-                onRefresh = { model.refreshHideLists() },
-                onUnhidePost = { model.unhidePost(it) },
-                onUnhideAuthor = { model.unhideAuthor(it) },
-                appealText = model.appealText,
-                onAppealTextChange = { model.appealText = it },
-                appealPostId = model.appealPostId,
-                onAppealPostIdChange = { model.appealPostId = it },
-                onAppeal = { model.sendAppeal(it) },
-                inbox = model.inbox,
-                onCheckInbox = { model.checkInbox() },
-                onHideReported = { model.hidePost(it) },
-            )
-            IdentitySection(
-                npub = model.npub,
-                pubkeyHex = model.pubkeyHex,
-                revealedBackup = model.revealedBackup,
-                restoreInput = model.restoreInput,
-                onRestoreInputChange = model::changeRestoreInput,
-                confirmingRestore = model.confirmingRestore,
-                confirmingReplace = model.confirmingReplace,
-                message = model.identityMessage,
-                enabled = enabled,
-                onReveal = { model.revealBackup() },
-                onHide = model::hideBackup,
-                onRestore = model::restore,
-                onReplace = model::replaceKey,
-                onCancelConfirm = model::cancelConfirm,
-                backupPassword = model.backupPassword,
-                onBackupPasswordChange = { model.backupPassword = it },
-                backupPasswordConfirm = model.backupPasswordConfirm,
-                onBackupPasswordConfirmChange = { model.backupPasswordConfirm = it },
-                encryptedBackup = model.encryptedBackup,
-                onCreateEncrypted = { model.createEncryptedBackup() },
-                onCopyEncrypted = { backup ->
-                    val clipboard = context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager
-                    val clip = ClipData.newPlainText("Freegram encrypted key backup", backup)
-                    // Keep it out of clipboard previews; it is encrypted, but still worth not displaying.
-                    clip.description.extras = android.os.PersistableBundle().apply { putBoolean("android.content.extra.IS_SENSITIVE", true) }
-                    clipboard.setPrimaryClip(clip)
-                    model.message = "Encrypted backup copied."
-                },
-                restorePassword = model.restorePassword,
-                onRestorePasswordChange = { model.restorePassword = it },
-            )
-        }
     }
 }

@@ -31,6 +31,20 @@ object NearbyState {
     val log = MutableStateFlow<List<String>>(emptyList())
     /** Increments after each exchange so the screen can reload its lists. */
     val exchanges = MutableStateFlow(0)
+    val postsReceived = MutableStateFlow(0)
+    val postsPassed = MutableStateFlow(0)
+    /** Plain-language summaries, newest first, with the time they happened (epoch ms). */
+    val activity = MutableStateFlow<List<Pair<String, Long>>>(emptyList())
+
+    fun summarize(report: ExchangeReport): String {
+        if (report.outcome != "Complete" && report.received == 0 && report.sent == 0) return "A nearby phone left before swapping (${report.outcome.lowercase()})"
+        val parts = buildList {
+            if (report.received > 0 || report.photosReceived > 0) add("got ${report.received} posts" + if (report.photosReceived > 0) " and ${report.photosReceived} photos" else "")
+            if (report.sent > 0) add("passed on ${report.sent}; it saved ${report.acknowledged}")
+            if (report.rejected > 0) add("refused ${report.rejected} (hidden, blocked or invalid)")
+        }
+        return if (parts.isEmpty()) "Met a nearby phone; nothing new to swap" else "Nearby phone: " + parts.joinToString(", ")
+    }
 
     fun describe(peer: String, report: ExchangeReport) =
         "$peer: ${report.outcome}. Received ${report.received} posts and ${report.photosReceived} photos, " +
@@ -65,6 +79,9 @@ class NearbyService : Service() {
             override fun onExchange(peer: String, report: ExchangeReport) {
                 exchangeCount++
                 NearbyState.log.value = (listOf(NearbyState.describe(peer, report)) + NearbyState.log.value).take(10)
+                NearbyState.postsReceived.value += report.received
+                NearbyState.postsPassed.value += report.acknowledged
+                NearbyState.activity.value = (listOf(NearbyState.summarize(report) to System.currentTimeMillis()) + NearbyState.activity.value).take(10)
                 NearbyState.exchanges.value++
                 update("Sharing nearby · $exchangeCount exchanges")
             }

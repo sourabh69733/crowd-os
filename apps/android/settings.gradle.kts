@@ -15,4 +15,4 @@ dependencyResolutionManagement {
 }
 
 rootProject.name = "Freegram"
-include(":app")
+include(":app", ":shared")

@@ -18,6 +18,7 @@ import androidx.room.RoomDatabase
 data class BulletinRow(@PrimaryKey val id: String, val createdAt: Long, val wire: String, @ColumnInfo(defaultValue = "0") val hops: Int = 0)
 
 data class NearbyRow(val id: String, val wire: String, val hops: Int)
+data class IdHops(val id: String, val hops: Int)
 
 @Entity(
     tableName = "relay_deliveries",
@@ -65,6 +66,8 @@ interface BulletinDao {
             "ORDER BY b.createdAt, b.id"
     ) suspend fun evictionCandidates(): List<EvictionCandidate>
     @Query("DELETE FROM relay_deliveries WHERE eventId = :eventId") suspend fun deleteDeliveries(eventId: String)
+    @Query("SELECT id, hops FROM bulletins") suspend fun allHops(): List<IdHops>
+    @Query("SELECT * FROM relay_deliveries") suspend fun allDeliveries(): List<RelayDeliveryRow>
     @Query("DELETE FROM bulletins WHERE id = :eventId") suspend fun deleteBulletin(eventId: String)
     @Query(
         "SELECT id, wire, hops FROM bulletins WHERE createdAt BETWEEN :minCreatedAt AND :maxCreatedAt AND hops < :maxHops " +

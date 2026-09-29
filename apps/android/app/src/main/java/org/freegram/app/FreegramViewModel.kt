@@ -12,6 +12,9 @@ import kotlinx.coroutines.withContext
 import org.freegram.app.feed.FollowedFeedSync
 import org.freegram.app.feed.RelayRefreshResult
 import android.graphics.BitmapFactory
+import android.net.ConnectivityManager
+import android.net.Network
+import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
@@ -38,16 +41,23 @@ import org.freegram.app.relay.RetryPolicy
 import org.freegram.app.store.AuthorPolicy
 import org.freegram.app.store.AuthorState
 import org.freegram.app.store.RoomStore
+import org.freegram.shared.model.FreegramUi
+import org.freegram.shared.model.MeUi
+import org.freegram.shared.model.NearbyActivity
+import org.freegram.shared.model.NearbyUi
+import org.freegram.shared.model.PhotoUi
+import org.freegram.shared.model.PostSource
+import org.freegram.shared.model.PostUi
 
 /** Screen state and actions. Survives rotation; all storage, signing and network work runs off the main thread. */
-class FreegramViewModel(application: Application) : AndroidViewModel(application) {
+class FreegramViewModel(application: Application) : AndroidViewModel(application), FreegramUi {
     private val store = RoomStore.shared(application)
     private val identity = ProtectedIdentity(application)
     private val relayClient = RelayClient()
     private val media = MediaStore.shared(application)
 
     // Inputs
-    var draft by mutableStateOf("")
+    override var draft by mutableStateOf("")
     var firstRelay by mutableStateOf(store.relayUrl(0))
     var secondRelay by mutableStateOf(store.relayUrl(1))
     var authorInput by mutableStateOf("")
@@ -63,7 +73,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var selectedPhotoNote by mutableStateOf(""); private set
 
     // Posts and delivery
-    var selected by mutableStateOf<BulletinEvent?>(null); private set
+    var devSelected by mutableStateOf<BulletinEvent?>(null); private set
     var canDeliver by mutableStateOf(false); private set
     var firstState by mutableStateOf(""); private set
     var secondState by mutableStateOf(""); private set
@@ -104,15 +114,42 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var inbox by mutableStateOf<List<ModerationMessage>>(emptyList()); private set
 
     // Status
-    var ready by mutableStateOf(false); private set
-    var busy by mutableStateOf(false); private set
+    override var ready by mutableStateOf(false); private set
+    override var busy by mutableStateOf(false); private set
     var message by mutableStateOf("")
     var feedMessage by mutableStateOf(""); private set
     var identityMessage by mutableStateOf(""); private set
 
     private val relays get() = listOf(firstRelay.trim(), secondRelay.trim())
 
+    // ----- Shared screens (FreegramUi). Declared before init because init already updates them. -----
+    override var online by mutableStateOf(false); private set
+    override var posts by mutableStateOf<List<PostUi>>(emptyList()); private set
+    private var detailId by mutableStateOf<String?>(null)
+    override val selected: PostUi? get() = detailId?.let { id -> posts.firstOrNull { it.id == id } }
+    override val draftPhoto: ImageBitmap? get() = pickedPreview
+    override var toast by mutableStateOf<String?>(null); private set
+    override val reportReasons: List<String> get() = REPORT_REASONS
+    override val canReport: Boolean get() = maintainers.any { it.enabled && it.pubkey != pubkeyHex }
+    override val isMaintainer: Boolean get() = pubkeyHex.isNotEmpty() && maintainers.any { it.pubkey == pubkeyHex }
+    private var backupDone by mutableStateOf(store.backupDone())
+    override val me: MeUi get() = MeUi(shortKey(npub), npub, hueOf(pubkeyHex), backupDone)
+    private var nearbyCounts by mutableStateOf(Triple(0, 0, 0))
+    private var nearbyActivity by mutableStateOf<List<Pair<String, Long>>>(emptyList())
+    override val nearby: NearbyUi get() = NearbyUi(
+        nearbyRunning, nearbyStatus, nearbyCounts.first, nearbyCounts.second, nearbyCounts.third,
+        nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge,
+    )
+    private val thumbnails = HashMap<String, ImageBitmap>()
+    private val connectivity = application.getSystemService(ConnectivityManager::class.java)
+    private val networkCallback = object : ConnectivityManager.NetworkCallback() {
+        override fun onAvailable(network: Network) { viewModelScope.launch { online = true } }
+        override fun onLost(network: Network) { viewModelScope.launch { online = hasInternet() } }
+    }
+
     init {
+        online = hasInternet()
+        runCatching { connectivity.registerDefaultNetworkCallback(networkCallback) }
         observeNearby()
         viewModelScope.launch {
             try {
@@ -137,16 +174,18 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         catch (failure: Exception) { message = failure.message ?: "Could not save draft" }
     }
 
-    fun pickPhoto(uri: Uri) = busyAction({ message = it ?: "Could not use that photo" }) {
+    fun pickPhoto(uri: Uri) = busyAction({ toast = it ?: "Could not use that photo" }) {
         val encoded = withContext(Dispatchers.Default) { PhotoEncoder.encode(getApplication<Application>().contentResolver, uri) }
         pickedPhoto = encoded
         pickedPreview = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(encoded.bytes, 0, encoded.bytes.size).asImageBitmap() }
         message = "Photo ready: ${encoded.ref.width}×${encoded.ref.height}, ${encoded.bytes.size / 1024} KB. Location and camera details removed."
     }
 
-    fun removePhoto() { pickedPhoto = null; pickedPreview = null }
+    override fun removePhoto() { pickedPhoto = null; pickedPreview = null }
 
-    fun publish() = busyAction({ message = it ?: "Publish failed; check saved event" }) {
+    override fun publish() { publishJob() }
+
+    private fun publishJob() = busyAction({ toast = it ?: "Could not post. Your text is still in the draft." }) {
         message = ""
         require(relays.all { it.startsWith("wss://") } && relays.distinct().size == 2) { "Use two distinct wss:// relay URLs" }
         val text = draft
@@ -163,7 +202,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         show(signed)
         draft = ""
         removePhoto()
+        toast = if (online) "Posted. Sending to your servers." else "Saved. Nearby phones can get it now; servers once you're online."
         deliver(signed)
+        refreshLists()
     }
 
     fun resubmit(event: BulletinEvent) = busyAction({ message = it ?: "Relay delivery failed" }) {
@@ -172,14 +213,14 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun deleteSelected() {
-        val event = selected ?: return
+        val event = devSelected ?: return
         if (!confirmingDelete) { confirmingDelete = true; return }
         busyAction({ message = it ?: "Could not delete" }, after = { confirmingDelete = false }) {
             io {
                 store.deleteLocal(event.id)
                 PhotoRef.of(event)?.let { media.removeIfUnused(it.sha256, referencedPhotos()) }
             }
-            selected = null
+            devSelected = null
             selectedPhoto = null
             refreshLists()
             message = "Deleted from this phone. Copies already on relays or other phones remain."
@@ -207,21 +248,16 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     fun refreshHideLists() = busyAction({ moderationMessage = it ?: "Refresh failed" }) {
-        val keys = maintainers.map { it.pubkey }
-        val results = relays.map { relay ->
-            val result = io { relayClient.fetchHideLists(relay, keys) }
-            val updated = io { result.events.count { store.saveHideList(it) } }
-            "$relay: ${result.status}, $updated updated"
-        }
+        val results = syncHideLists()
         refreshLists()
         moderationMessage = results.joinToString("\n")
     }
 
     /** Maintainer action: adds the selected post or its author to this phone's own public hide list. */
     fun hideSelected(author: Boolean) = busyAction({ message = it ?: "Could not hide" }) {
-        val event = selected ?: return@busyAction
+        val event = devSelected ?: return@busyAction
         editMyHideList { list -> if (author) list.copy(authors = list.authors + event.pubkey) else list.copy(posts = list.posts + event.id) }
-        selected = null
+        devSelected = null
         selectedPhoto = null
         refreshLists()
         message = if (author) "Author added to your public hide list." else "Post added to your public hide list."
@@ -245,7 +281,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     /** Sends a private report on the selected post to every enabled maintainer except this phone's own key. */
     fun sendReport() = busyAction({ reportStatus = it ?: "Report failed" }) {
-        val event = selected ?: return@busyAction
+        val event = devSelected ?: return@busyAction
         val targets = maintainers.filter { it.enabled && it.pubkey != pubkeyHex }.map { it.pubkey }
         require(targets.isNotEmpty()) { "Follow at least one maintainer first" }
         val sent = sendPrivate(targets, ModerationMessage(ModerationMessage.Type.REPORT, pubkeyHex, nowSeconds(), event.id, reportReason, reportNote.trim()))
@@ -294,6 +330,115 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             if (outcomes.any { it.second != "Accepted" }) ". Edit again when online to resend." else ""
     }
 
+    override fun updateDraft(text: String) { draft = text }
+    override fun open(postId: String) { detailId = postId }
+    override fun closeDetail() { detailId = null }
+    override fun dismissToast() { toast = null }
+    fun showToast(text: String) { toast = text }
+
+    override fun refresh() {
+        busyAction({ toast = it ?: "Refresh failed" }) {
+            val following = authorPolicies.any { it.state == AuthorState.FOLLOWING }
+            if (online && following) syncFeed()
+            if (online && maintainers.isNotEmpty()) syncHideLists()
+            if (io { store.retryableDeliveries(nowSeconds() - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty() }) RelayRetryWorker.schedule(getApplication())
+            refreshLists()
+            toast = when {
+                !online -> "No internet. Showing what's on this phone."
+                !following -> "Follow someone to get their posts here."
+                else -> "Up to date."
+            }
+        }
+    }
+
+    override fun follow(authorKey: String) = changePolicy(authorKey, AuthorState.FOLLOWING, "Following. Their posts appear in Home after the next refresh.")
+    override fun mute(authorKey: String) = changePolicy(authorKey, AuthorState.MUTED, "Muted. Their posts are hidden on this phone.")
+    override fun block(authorKey: String) = changePolicy(authorKey, AuthorState.BLOCKED, "Blocked. Their posts are hidden and not passed on.")
+
+    private fun changePolicy(key: String, state: AuthorState, done: String) {
+        busyAction({ toast = it ?: "Could not update" }) {
+            io { store.setAuthorState(key, state) }
+            if (state != AuthorState.FOLLOWING) detailId = null
+            refreshLists()
+            toast = done
+        }
+    }
+
+    override fun deleteLocal(postId: String) {
+        busyAction({ toast = it ?: "Could not delete" }) {
+            val event = io { store.savedEvents() }.firstOrNull { it.id == postId } ?: return@busyAction
+            io {
+                store.deleteLocal(event.id)
+                PhotoRef.of(event)?.let { media.removeIfUnused(it.sha256, referencedPhotos()) }
+            }
+            detailId = null
+            refreshLists()
+            toast = "Deleted from this phone. Copies on servers and other phones stay."
+        }
+    }
+
+    override fun report(postId: String, reason: String, note: String) {
+        busyAction({ toast = it ?: "Report failed" }) {
+            val targets = maintainers.filter { it.enabled && it.pubkey != pubkeyHex }.map { it.pubkey }
+            require(targets.isNotEmpty()) { "Follow a maintainer first (Settings → Maintainers)" }
+            sendPrivate(targets, ModerationMessage(ModerationMessage.Type.REPORT, pubkeyHex, nowSeconds(), postId, reason, note.trim()))
+            toast = "Report sent privately to ${targets.size} maintainer(s)."
+        }
+    }
+
+    override fun hideForFollowers(postId: String) {
+        busyAction({ toast = it ?: "Could not hide" }) {
+            editMyHideList { it.copy(posts = it.posts + postId) }
+            detailId = null
+            refreshLists()
+            toast = "Hidden for everyone who follows you as a maintainer."
+        }
+    }
+
+    override fun setNearby(on: Boolean) { if (on) startNearby() else stopNearby() }
+    override fun setAutoPublish(on: Boolean) = changeAutoBridge(on)
+
+    override fun onCleared() { runCatching { connectivity.unregisterNetworkCallback(networkCallback) } }
+
+    private fun hasInternet(): Boolean = connectivity.activeNetwork?.let {
+        connectivity.getNetworkCapabilities(it)?.hasCapability(NetworkCapabilities.NET_CAPABILITY_INTERNET)
+    } == true
+
+    private fun toPostUi(event: BulletinEvent, hops: Int, states: List<String>, followed: Set<String>): PostUi {
+        val ref = PhotoRef.of(event)
+        val photo = when {
+            ref == null -> PhotoUi.None
+            else -> thumbnail(ref.sha256)?.let { PhotoUi.Loaded(it) } ?: PhotoUi.Missing
+        }
+        val accepted = states.count { it == "Accepted" }
+        val source = when {
+            states.isEmpty() -> if (hops > 0) PostSource.Nearby(hops) else PostSource.Server
+            hops > 0 && accepted == 0 -> PostSource.Nearby(hops)
+            "Sending" in states -> PostSource.Sending
+            accepted > 0 -> PostSource.Sent(accepted, states.size)
+            states.any(RetryPolicy::isRetryable) -> PostSource.WaitingForInternet
+            states.any { it.startsWith("Rejected") } -> PostSource.Rejected
+            else -> PostSource.OnlyHere
+        }
+        val label = runCatching { shortKey(Nip19.encodePublicKey(ByteArray(32) { event.pubkey.substring(it * 2, it * 2 + 2).toInt(16).toByte() })) }.getOrDefault(event.pubkey.take(12))
+        return PostUi(event.id, event.pubkey, label, hueOf(event.pubkey), ago(event.createdAt), event.content, photo, source,
+            mine = event.pubkey == pubkeyHex, followed = event.pubkey in followed)
+    }
+
+    private fun thumbnail(sha: String): ImageBitmap? = synchronized(thumbnails) {
+        thumbnails[sha] ?: media.path(sha)?.let { file ->
+            BitmapFactory.decodeFile(file.path, BitmapFactory.Options().apply { inSampleSize = 2 })?.asImageBitmap()?.also { thumbnails[sha] = it }
+        }
+    }
+
+    private fun ago(epochSeconds: Long): String {
+        val d = (nowSeconds() - epochSeconds).coerceAtLeast(0)
+        return when { d < 60 -> "now"; d < 3600 -> "${d / 60} min"; d < 86_400 -> "${d / 3600} h"; else -> "${d / 86_400} d" }
+    }
+
+    private fun shortKey(npub: String) = if (npub.length > 16) npub.take(10) + "…" + npub.takeLast(4) else npub
+    private fun hueOf(hex: String) = if (hex.length >= 4) (hex.take(4).toInt(16) % 360).toFloat() else 200f
+
     companion object {
         val REPORT_REASONS = listOf("Spam", "Harassment or abuse", "False or dangerous information", "Illegal content", "Other")
     }
@@ -318,7 +463,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     fun setAuthorState(pubkey: String, state: AuthorState) = busyAction({ feedMessage = it ?: "Could not update author" }) {
         io { store.setAuthorState(pubkey, state) }
-        if (state == AuthorState.BLOCKED && selected?.pubkey == pubkey) selected = null
+        if (state == AuthorState.BLOCKED && devSelected?.pubkey == pubkey) devSelected = null
         refreshLists()
         feedMessage = "Author ${state.name.lowercase()} locally"
     }
@@ -331,7 +476,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     fun refreshFeed() = busyAction({ feedMessage = it ?: "Refresh failed" }) {
         feedMessage = "Refreshing…"
-        feedRelayResults = io { FollowedFeedSync(store, relayClient).refresh(relays) }
+        syncFeed()
         refreshLists()
         feedMessage = "Refresh finished. Check each relay result below."
     }
@@ -375,6 +520,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         identityMessage = "Encrypting… this takes a few seconds."
         encryptedBackup = withContext(Dispatchers.Default) { identity.exportEncrypted(backupPassword) }
         backupPassword = ""; backupPasswordConfirm = ""
+        io { store.setBackupDone() }
+        backupDone = true
         identityMessage = "Encrypted backup ready. Keep the password separately; without it the backup cannot be opened."
     }
 
@@ -426,8 +573,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch { NearbyState.running.collect { nearbyRunning = it } }
         viewModelScope.launch { NearbyState.status.collect { nearbyStatus = it } }
         viewModelScope.launch { NearbyState.log.collect { nearbyLog = it } }
+        viewModelScope.launch { NearbyState.activity.collect { nearbyActivity = it } }
         viewModelScope.launch {
-            NearbyState.exchanges.collect { if (ready) { refreshLists(); selected?.let { show(it) } } }
+            NearbyState.exchanges.collect { count -> nearbyCounts = Triple(count, NearbyState.postsReceived.value, NearbyState.postsPassed.value) }
+        }
+        viewModelScope.launch {
+            NearbyState.exchanges.collect { if (ready) { refreshLists(); devSelected?.let { show(it) } } }
         }
     }
 
@@ -442,7 +593,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val results = io {
             RelayDelivery(store, relayClient::publish).deliver(event, targets) { relay, state ->
                 withContext(Dispatchers.Main) {
-                    if (selected?.id == event.id) { if (relay == targets[0]) firstState = state else secondState = state }
+                    if (devSelected?.id == event.id) { if (relay == targets[0]) firstState = state else secondState = state }
                 }
             }
         }
@@ -454,7 +605,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val (deliverable, first, second) = io {
             Triple(store.deliveryTargets(event.id).isNotEmpty(), store.relayState(event.id, targets[0]), store.relayState(event.id, targets[1]))
         }
-        selected = event
+        devSelected = event
         canDeliver = deliverable
         firstState = first
         secondState = second
@@ -478,6 +629,23 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         maintainers = io { store.maintainers() }
         hiddenCount = io { store.hiddenCount() }
         myHideList = io { pubkeyHex.takeIf { it.isNotEmpty() }?.let { store.hideList(it) } }
+        val hops = io { store.hopsById() }
+        val deliveries = io { store.deliveryStates() }
+        val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
+        posts = io { saved.map { toPostUi(it, hops[it.id] ?: 0, deliveries[it.id].orEmpty(), followed) } }
+    }
+
+    private suspend fun syncFeed() {
+        feedRelayResults = io { FollowedFeedSync(store, relayClient).refresh(relays) }
+    }
+
+    private suspend fun syncHideLists(): List<String> {
+        val keys = maintainers.map { it.pubkey }
+        return relays.map { relay ->
+            val result = io { relayClient.fetchHideLists(relay, keys) }
+            val updated = io { result.events.count { store.saveHideList(it) } }
+            "$relay: ${result.status}, $updated updated"
+        }
     }
 
     private suspend fun refreshIdentity() {
