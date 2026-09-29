@@ -4,6 +4,16 @@ plugins {
     id("com.google.devtools.ksp")
 }
 
+// Release signing key lives outside the repo. Its password comes from FREEGRAM_KEYSTORE_PASSWORD or,
+// on the maintainer's Mac, the Keychain item "freegram-release-keystore". Without either, release builds are unsigned.
+val releaseKeystore = file(System.getProperty("user.home") + "/.freegram/freegram-release.jks")
+val releaseKeystorePassword: String? by lazy {
+    System.getenv("FREEGRAM_KEYSTORE_PASSWORD") ?: runCatching {
+        providers.exec { commandLine("security", "find-generic-password", "-s", "freegram-release-keystore", "-w") }
+            .standardOutput.asText.get().trim().takeIf { it.isNotEmpty() }
+    }.getOrNull()
+}
+
 android {
     namespace = "org.freegram.app"
     compileSdk = 37
@@ -12,9 +22,39 @@ android {
         applicationId = "org.freegram.app"
         minSdk = 26
         targetSdk = 35
-        versionCode = 1
-        versionName = "0.1.0"
+        versionCode = 2
+        versionName = "0.2.0"
     }
+
+    signingConfigs {
+        if (releaseKeystore.exists()) create("release") {
+            storeFile = releaseKeystore
+            storePassword = releaseKeystorePassword
+            keyAlias = "freegram"
+            keyPassword = releaseKeystorePassword
+        }
+    }
+
+    buildTypes {
+        release {
+            isMinifyEnabled = true
+            isShrinkResources = true
+            proguardFiles(getDefaultProguardFile("proguard-android-optimize.txt"), "proguard-rules.pro")
+            signingConfig = signingConfigs.findByName("release")
+            // Quartz ships "-keep class com.vitorpamplona.quartz.** { *; }", which keeps all ~6,000 of its classes
+            // plus Jackson and Kotlin reflection. Freegram calls only NIP-44 and NIP-49 directly, so let R8 trace them.
+            optimization { keepRules { ignoreFrom("com.vitorpamplona.quartz:quartz-android") } }
+        }
+    }
+
+    packaging {
+        // Quartz brings a bundled SQLite and a chess-openings file that Freegram never uses (Room uses Android's SQLite).
+        jniLibs.excludes += "**/libsqliteJni.so"
+        resources.excludes += "eco.pgn"
+    }
+
+    // 32-bit Intel builds only matter for old emulators; real phones are ARM, and newer emulators are x86_64.
+    defaultConfig { ndk { abiFilters += listOf("arm64-v8a", "armeabi-v7a", "x86_64") } }
 
     compileOptions {
         sourceCompatibility = JavaVersion.VERSION_17
