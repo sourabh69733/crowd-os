@@ -5,6 +5,8 @@ Status: updated 25 September 2026. A first Android application and protocol test
 ```text
 apps/
   android/                 new native Android app and Gradle build
+    app/                   Android-only code: storage, keys, relays, Nearby, services
+    shared/                Kotlin Multiplatform screens and UI model (Android target only for now)
     README.md              build command and prototype limitations
   mobile/                  existing Expo/CrowdOS code; retained for reference
 protocol/
