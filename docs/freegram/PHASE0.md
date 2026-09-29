@@ -1,6 +1,6 @@
 # Freegram Phase 0: first-release contract
 
-Status: design contract, updated 25 September 2026. A buildable Android prototype and protocol tests now exist; relay interoperability, device key behavior and radio delivery still require validation. This is **not** a deployable system. See [Phase 1 status](PHASE1_STATUS.md).
+Status: design contract, updated 25 September 2026. A buildable Android prototype and protocol tests now exist; relay interoperability, device key behavior and radio delivery still require validation. This is **not** a deployable system. See [status log](STATUS_LOG.md).
 
 ## Purpose and scope
 

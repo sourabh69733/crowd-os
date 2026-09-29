@@ -1,6 +1,6 @@
-# Freegram Android slice: status
+# Freegram status log
 
-Updated 26 September 2026. This is a developer prototype, not a field pilot or a release candidate.
+Detailed history of what was built and how each part was tested. For the one-page summary, see [PROGRESS.md](PROGRESS.md). Last updated 29 September 2026. This is a developer prototype, not a field pilot or a release candidate.
 
 ## Implemented and verified
 
