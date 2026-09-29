@@ -414,8 +414,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         busyAction({ toast = it ?: "Report failed" }) {
             val targets = maintainers.filter { it.enabled && it.pubkey != pubkeyHex }.map { it.pubkey }
             require(targets.isNotEmpty()) { "Follow a maintainer first (Settings → Maintainers)" }
-            sendPrivate(targets, ModerationMessage(ModerationMessage.Type.REPORT, pubkeyHex, nowSeconds(), postId, reason, note.trim()))
-            toast = "Report sent privately to ${targets.size} maintainer(s)."
+            val sent = sendPrivate(targets, ModerationMessage(ModerationMessage.Type.REPORT, pubkeyHex, nowSeconds(), postId, reason, note.trim()))
+            toast = "Private report to ${targets.size} maintainer(s): $sent"
         }
     }
 
@@ -455,10 +455,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun addMaintainerId(text: String) {
+        val key = runCatching { parseKey(text) }.getOrNull()?.takeIf { it.length == 64 }
+        if (key == null) { toast = "That isn't a valid Freegram ID."; return }
         busyAction({ toast = it ?: "Could not add maintainer" }) {
-            io { store.setMaintainer(parseKey(text), true) }
-            if (online) syncHideLists()
+            io { store.setMaintainer(key, true) }
             refreshLists()
+            if (online) { syncHideLists(); refreshLists() }
             toast = "Maintainer added. Their hide list now applies on this phone."
         }
     }
@@ -493,8 +495,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             val id = postId.trim().lowercase().takeIf { it.isNotEmpty() }
             require(id == null || (id.length == 64 && id.all { it in '0'..'9' || it in 'a'..'f' })) { "Post ID must be 64 characters (0-9, a-f)" }
             require(text.isNotBlank()) { "Write why the decision should change" }
-            sendPrivate(listOf(maintainer), ModerationMessage(ModerationMessage.Type.APPEAL, pubkeyHex, nowSeconds(), id, "appeal", text.trim()))
-            toast = "Appeal sent privately."
+            val sent = sendPrivate(listOf(maintainer), ModerationMessage(ModerationMessage.Type.APPEAL, pubkeyHex, nowSeconds(), id, "appeal", text.trim()))
+            toast = "Private appeal: $sent"
         }
     }
 
@@ -872,6 +874,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     private suspend fun syncHideLists(): List<String> {
         val keys = maintainers.map { it.pubkey }
+        if (keys.isEmpty()) return emptyList()
         return relays.map { relay ->
             val result = io { relayClient.fetchHideLists(relay, keys) }
             val updated = io { result.events.count { store.saveHideList(it) } }
