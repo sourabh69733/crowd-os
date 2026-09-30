@@ -79,7 +79,7 @@ object Nip01Protocol {
         event.kind == 1 && event.tags.size <= MAX_TAGS &&
             event.content.toByteArray(Charsets.UTF_8).size <= MAX_CONTENT_BYTES &&
             toJson(event).toByteArray(Charsets.UTF_8).size <= MAX_EVENT_BYTES &&
-            event.id.length == 64 && event.pubkey.length == 64 && event.sig.length == 128 &&
+            isLowerHex(event.id, 64) && isLowerHex(event.pubkey, 64) && isLowerHex(event.sig, 128) &&
             event.id == id(event.pubkey, event.createdAt, event.kind, event.tags, event.content) &&
             Secp256k1.verifySchnorr(hexToBytes(event.sig), hexToBytes(event.id), hexToBytes(event.pubkey))
     } catch (_: Exception) {
@@ -108,7 +108,7 @@ object Nip01Protocol {
     /** Checks ID and signature of an event of any kind up to [maxBytes]. */
     fun verifySigned(event: BulletinEvent, maxBytes: Int): Boolean = try {
         toJson(event).toByteArray(Charsets.UTF_8).size <= maxBytes &&
-            event.id.length == 64 && event.pubkey.length == 64 && event.sig.length == 128 &&
+            isLowerHex(event.id, 64) && isLowerHex(event.pubkey, 64) && isLowerHex(event.sig, 128) &&
             event.id == id(event.pubkey, event.createdAt, event.kind, event.tags, event.content) &&
             Secp256k1.verifySchnorr(hexToBytes(event.sig), hexToBytes(event.id), hexToBytes(event.pubkey))
     } catch (_: Exception) {
@@ -131,6 +131,12 @@ object Nip01Protocol {
             sig = item.getValue("sig").jsonPrimitive.content,
         )
     }
+
+    /**
+     * Keys and IDs must be canonical lowercase hex. Otherwise one key could appear under many spellings
+     * (e.g. uppercase) and slip past block lists, maintainer hide lists and per-author storage limits.
+     */
+    private fun isLowerHex(value: String, length: Int) = value.length == length && value.all { it in '0'..'9' || it in 'a'..'f' }
 
     private fun bytesToHex(bytes: ByteArray): String = buildString(bytes.size * 2) {
         bytes.forEach { byte ->

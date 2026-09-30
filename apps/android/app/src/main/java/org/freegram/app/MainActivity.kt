@@ -2,6 +2,9 @@ package org.freegram.app
 
 import android.app.Activity
 import android.content.ClipData
+import android.content.ClipDescription
+import android.content.pm.ApplicationInfo
+import android.os.PersistableBundle
 import android.content.ClipboardManager
 import android.content.Context
 import android.os.Bundle
@@ -59,7 +62,12 @@ private fun FreegramHost(model: FreegramViewModel) {
             pickPhoto = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             startNearby = { permissions.launch(nearbyPermissions() + optionalNearbyPermissions()) },
             copyText = { label, text ->
-                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(ClipData.newPlainText(label, text))
+                val clip = ClipData.newPlainText(label, text)
+                // Keep backup codes out of the clipboard preview and keyboard suggestions.
+                if (label.contains("backup", ignoreCase = true)) {
+                    clip.description.extras = PersistableBundle().apply { putBoolean(ClipDescription.EXTRA_IS_SENSITIVE, true) }
+                }
+                (context.getSystemService(Context.CLIPBOARD_SERVICE) as ClipboardManager).setPrimaryClip(clip)
                 model.showToast("Copied.")
             },
             scanToFollow = {
@@ -75,7 +83,10 @@ private fun FreegramHost(model: FreegramViewModel) {
         )
     }
     val pages = remember {
-        listOf(SettingsPage("Developer tools", "Raw post data, bridge test, fetch by ID") { DeveloperPage(model) })
+        // Test tools stay out of release builds.
+        val debuggable = context.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+        if (!debuggable) emptyList()
+        else listOf(SettingsPage("Developer tools", "Raw post data, bridge test, fetch by ID") { DeveloperPage(model) })
     }
     FreegramApp(model, platform, pages)
 }

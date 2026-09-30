@@ -84,7 +84,8 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] APK on your website
 
 ### 6. Field pilot ⬜
-- [ ] Code and security review, then merge to `main`
+- [x] Code and security review (30 September): 4 fixes, see [STATUS_LOG.md](STATUS_LOG.md)
+- [ ] Merge to `main`
 - [ ] Principles doc: content rules, safety by design, maintainer role, legal questions for a lawyer
 - [ ] Small real group, one maintainer
 - [ ] Measure delivery, battery, confusion points; go or no-go
@@ -109,7 +110,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 
 ## Next up
 
-1. Code and security review of the branch, fix findings, merge to `main`.
+1. Merge the branch to `main` (review done 30 September).
 2. Back up the release key; put APK 0.2.0 on your website.
 3. Two-phone tests 3–5 with the release build.
 4. Principles doc (content rules, safety, legal questions).

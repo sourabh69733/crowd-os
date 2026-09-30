@@ -70,6 +70,19 @@ class ProtocolCompatibilityTest {
         assertFalse(Nip01Protocol.verifyBulletin(event.copy(pubkey = "00".repeat(32))))
     }
 
+    @Test fun rejectsNonCanonicalKeySpelling() {
+        // Same key in uppercase, validly re-signed: must not count as a different author.
+        val secret = hex("00".repeat(31) + "03")
+        val event = Nip01Protocol.signBulletin(secret, "Test bulletin", 1_700_000_000)
+        val upper = event.pubkey.uppercase()
+        val id = Nip01Protocol.id(upper, event.createdAt, 1, event.tags, event.content)
+        val sig = Secp256k1.signSchnorr(hex(id), secret, ByteArray(32)).joinToString("") { "%02x".format(it) }
+        val respelled = event.copy(id = id, pubkey = upper, sig = sig)
+        assertFalse(Nip01Protocol.verifyBulletin(respelled))
+        assertFalse(Nip01Protocol.verifySigned(respelled, 4096))
+        assertFalse(Nip01Protocol.verifyBulletin(event.copy(sig = event.sig.uppercase())))
+    }
+
     @Test fun importExplainsPlainTextAndRejectsTampering() {
         val plainTextError = assertThrows(IllegalArgumentException::class.java) {
             Nip01Protocol.parseImportedBulletin("Help is needed")
