@@ -93,6 +93,8 @@ interface SettingsUi {
     fun revealPlainKey()
     fun hidePlainKey()
     fun replaceKeyNow()
+    /** Erases this phone's ID, posts, photos and lists, then closes the app. Cannot be undone without a backup. */
+    fun panicWipe()
 }
 
 /** A page reached from Settings. Its content comes from the platform app. */

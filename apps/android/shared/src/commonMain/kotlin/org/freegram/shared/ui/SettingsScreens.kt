@@ -3,6 +3,9 @@ package org.freegram.shared.ui
 import androidx.compose.foundation.background
 import androidx.compose.foundation.border
 import androidx.compose.foundation.clickable
+import androidx.compose.foundation.gestures.detectTapGestures
+import androidx.compose.foundation.layout.Box
+import androidx.compose.foundation.layout.fillMaxHeight
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
@@ -27,21 +30,27 @@ import androidx.compose.runtime.DisposableEffect
 import androidx.compose.runtime.getValue
 import androidx.compose.runtime.mutableStateOf
 import androidx.compose.runtime.remember
+import androidx.compose.runtime.rememberCoroutineScope
 import androidx.compose.runtime.setValue
 import androidx.compose.ui.Alignment
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.draw.clip
+import androidx.compose.ui.input.pointer.pointerInput
 import androidx.compose.ui.text.font.FontWeight
 import androidx.compose.ui.text.input.PasswordVisualTransformation
 import androidx.compose.ui.unit.dp
 import androidx.compose.ui.unit.sp
+import kotlinx.coroutines.delay
+import kotlinx.coroutines.launch
+import kotlin.time.TimeSource
 import org.freegram.shared.model.FreegramUi
 import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
 
 enum class SettingsDest(val title: String) {
-    Backup("Backup and key"), People("People you follow"), Maintainers("Maintainers"), Servers("Servers"), Storage("Storage")
+    Backup("Backup and key"), People("People you follow"), Maintainers("Maintainers"), Servers("Servers"), Storage("Storage"),
+    Wipe("Panic wipe"),
 }
 
 private const val MIN_PASSWORD = 10
@@ -66,6 +75,7 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
             ListRow("Servers", "${ui.relayUrls.size} servers") { dest = SettingsDest.Servers }
             ListRow("Storage", "${s.posts} of ${s.maxPosts} posts · ${mb(s.photoBytes)} of ${mb(s.maxPhotoBytes)} photos") { dest = SettingsDest.Storage }
         }
+        ListBox { ListRow("Panic wipe", "Erase Freegram from this phone in seconds") { dest = SettingsDest.Wipe } }
         if (extraPages.isNotEmpty()) ListBox { extraPages.forEach { p -> ListRow(p.title, p.subtitle) { extra = p } } }
         Hint("Freegram prototype · not for safety-critical use yet.")
     }
@@ -82,6 +92,7 @@ fun SettingsDestination(ui: FreegramUi, platform: PlatformActions, dest: Setting
             SettingsDest.Maintainers -> MaintainersPage(ui)
             SettingsDest.Servers -> ServersPage(ui)
             SettingsDest.Storage -> StoragePage(ui)
+            SettingsDest.Wipe -> WipePage(ui)
         }
     }
 }
@@ -335,5 +346,55 @@ private fun StoragePage(ui: FreegramUi) {
         Text("When full, Freegram removes posts from blocked people first, then the oldest posts from others, then your oldest posts that every server already has. Posts still waiting to be sent are never removed.",
             fontSize = 13.sp, color = c.ink2)
         Text("Each person can have at most 20 posts on your phone, so one account can't fill it.", fontSize = 13.sp, color = c.ink2)
+    }
+}
+
+// ---------- Panic wipe ----------
+
+private const val HOLD_MS = 2_000
+
+@Composable
+private fun WipePage(ui: FreegramUi) {
+    val c = Fg.colors
+    Card {
+        Text("Erases Freegram from this phone", fontWeight = FontWeight.SemiBold, color = c.red)
+        Text("Your ID key, posts, photos, the people you follow and your maintainers are deleted, and the app closes. " +
+            "Next time it opens like a new install.", fontSize = 13.sp, color = c.ink2)
+    }
+    Section("What it can't erase", "Posts already on servers or other phones stay there; they're public. " +
+        "Without an encrypted backup your ID is gone for good. With one, you can restore it on any phone.")
+    Hint(if (ui.me.backupDone) "✓ You have an encrypted backup." else "You have no backup yet. Make one in Backup and key first if you want to keep your ID.")
+    Spacer(Modifier.height(8.dp))
+    HoldToConfirm("Hold to wipe", onConfirm = ui::panicWipe)
+    Hint("Press and hold for 2 seconds. Letting go early cancels.")
+}
+
+/** A button that fires only after being held for [HOLD_MS], so a stray tap can't trigger it. */
+@Composable
+private fun HoldToConfirm(text: String, onConfirm: () -> Unit) {
+    val c = Fg.colors
+    var progress by remember { mutableStateOf(0f) }
+    val scope = rememberCoroutineScope()
+    Box(
+        Modifier.fillMaxWidth().height(52.dp).clip(RoundedCornerShape(12.dp)).background(c.redSoft)
+            .pointerInput(Unit) {
+                detectTapGestures(onPress = {
+                    val hold = scope.launch {
+                        // Measure real time: on a slow phone, frames (and short delays) can take much longer than asked.
+                        val start = TimeSource.Monotonic.markNow()
+                        while (progress < 1f) {
+                            delay(30)
+                            progress = (start.elapsedNow().inWholeMilliseconds.toFloat() / HOLD_MS).coerceAtMost(1f)
+                        }
+                        onConfirm()
+                    }
+                    tryAwaitRelease()
+                    if (progress < 1f) { hold.cancel(); progress = 0f }
+                })
+            },
+        contentAlignment = Alignment.Center,
+    ) {
+        Box(Modifier.fillMaxHeight().fillMaxWidth(progress).align(Alignment.CenterStart).background(c.red.copy(alpha = 0.35f)))
+        Text(if (progress > 0f) "Keep holding…" else text, color = c.red, fontWeight = FontWeight.Bold)
     }
 }

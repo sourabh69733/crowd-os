@@ -19,6 +19,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | Moderation | Maintainers, reports, appeals | 🟡 |
 | New UI | App screens from the approved mockup | ✅ |
 | Release | Signed APK for the website | ✅ 0.2.0 built |
+| Safety for protests | Panic wipe, optional app lock | 🟡 panic wipe done |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
 ### 0. Protocol and threat model ✅
@@ -83,6 +84,12 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] You back up the release key and its password
 - [ ] APK on your website
 
+### Safety for protests 🟡
+- [x] Panic wipe: hold 2 seconds in Settings; erases ID, posts, photos and lists (checked on the emulator)
+- [ ] Optional app lock (PIN or fingerprint), off by default
+- [ ] Encrypt local data so a wipe also defeats forensic recovery
+- [ ] Optional disguised icon and name
+
 ### 6. Field pilot ⬜
 - [x] Code and security review (30 September): 4 fixes, see [STATUS_LOG.md](STATUS_LOG.md)
 - [ ] Merge to `main`
@@ -107,6 +114,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 29 Sep | You are the default maintainer. |
 | 29 Sep | Android only for now; code structured for iPhone later (Kotlin Multiplatform `shared` module). |
 | 29 Sep | Release key kept on your Mac, password in Keychain (option A). |
+| 30 Sep | Panic wipe: yes. App lock: optional only, off by default. |
 
 ## Next up
 

@@ -21,7 +21,9 @@ interface SecretWrapper {
 }
 
 /** Android Keystore AES-GCM wrapping. This is not hardware Schnorr signing. */
-class KeystoreSecretWrapper(private val alias: String = "freegram_nostr_wrap_v1") : SecretWrapper {
+class KeystoreSecretWrapper(private val alias: String = DEFAULT_ALIAS) : SecretWrapper {
+    companion object { const val DEFAULT_ALIAS = "freegram_nostr_wrap_v1" }
+
     override fun wrap(secret: ByteArray): ByteArray {
         val cipher = Cipher.getInstance("AES/GCM/NoPadding")
         cipher.init(Cipher.ENCRYPT_MODE, key())

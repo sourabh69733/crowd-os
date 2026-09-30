@@ -18,6 +18,7 @@ import android.net.NetworkCapabilities
 import android.net.Uri
 import androidx.compose.ui.graphics.ImageBitmap
 import androidx.compose.ui.graphics.asImageBitmap
+import org.freegram.app.identity.PanicWipe
 import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.media.EncodedPhoto
 import org.freegram.app.moderation.HideList
@@ -556,6 +557,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             refreshLists()
             toast = "New ID made. Back it up now and share your new ID."
         }
+    }
+
+    override fun panicWipe() {
+        // Stop radio first so nothing is being written while data is cleared.
+        runCatching { NearbyService.stop(getApplication()) }
+        PanicWipe.wipe(getApplication())
     }
 
     private fun personOf(key: String, state: PersonState) = PersonUi(key, labelOf(key), npubOf(key).takeLast(4), hueOf(key), state)
