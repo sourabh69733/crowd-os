@@ -94,12 +94,12 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 ### Safety for protests 🟡
 - [x] Panic wipe: hold 2 seconds in Settings; erases ID, posts, photos and lists (checked on the emulator)
 - [ ] Optional app lock (PIN or fingerprint), off by default
-- [ ] Encrypt local data so a wipe also defeats forensic recovery
+- [ ] Encrypt local data: deferred; build only together with the optional app lock (Android 10+ already encrypts each file, so a wipe already defeats most recovery)
 - [ ] Optional disguised icon and name
 
 ### 6. Field pilot ⬜
 - [x] Code and security review (30 September): 4 fixes, see [STATUS_LOG.md](STATUS_LOG.md)
-- [ ] Merge to `main`
+- [x] Merged to `main` (1 October)
 - [x] Principles doc, draft 1 ([PRINCIPLES.md](PRINCIPLES.md)): content rules, safety by design, maintainer role, 12 legal questions
 - [ ] Your answers to its open decisions; lawyer review
 - [ ] Small real group, one maintainer
@@ -123,6 +123,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 29 Sep | Android only for now; code structured for iPhone later (Kotlin Multiplatform `shared` module). |
 | 29 Sep | Release key kept on your Mac, password in Keychain (option A). |
 | 30 Sep | Panic wipe: yes. App lock: optional only, off by default. |
+| 1 Oct | Local data encryption deferred until app lock; Android's own per-file encryption covers wipes on Android 10+. |
 | 1 Oct | Discover tab: maintainer suggestions, recent posts, search. Posts opt in with #freegram (on by default). |
 
 ## Next up
