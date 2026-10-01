@@ -20,6 +20,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | New UI | App screens from the approved mockup | ✅ |
 | Release | Signed APK for the website | ✅ 0.2.0 built |
 | Discover | Find people and posts | 🟡 built, 0.3.0 on your phone |
+| Replies and likes | Answer and react to posts | 🟡 built, 0.4.0 |
 | Safety for protests | Panic wipe, optional app lock | 🟡 panic wipe done |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
@@ -83,6 +84,11 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] "Show my posts in Discover" switch (on by default)
 - [ ] Check a tagged post shows on a second phone
 - [ ] Default maintainer, so new users see suggestions
+
+### Replies and likes 🟡
+- [x] Replies (NIP-10) and likes (NIP-25), counts on every post, thread under each post
+- [ ] Checked on your phones
+- [ ] Likes over Nearby
 
 ### Release ✅
 - [x] Release key outside the repo (`~/.freegram/`, password in Keychain)

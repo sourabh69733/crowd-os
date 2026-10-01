@@ -198,6 +198,21 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         return dao.savedWires().count { wire -> runCatching { Nip01Protocol.fromJson(wire) }.getOrNull()?.let(hidden::covers) == true }
     }
 
+    /** Keeps a verified like. Likes from others are capped at [MAX_LIKES]; this phone's own are never pruned. */
+    suspend fun saveLike(event: BulletinEvent, mine: Boolean = false, sent: Boolean = false): Boolean {
+        val postId = org.freegram.app.protocol.Likes.likedPost(event) ?: return false
+        dao.insertLike(LikeRow(event.id, postId, event.pubkey, event.createdAt, Nip01Protocol.toJson(event), mine, sent))
+        if (!mine) dao.pruneLikes(MAX_LIKES)
+        return true
+    }
+
+    /** Who liked each post (one count per person). */
+    suspend fun likes(): Map<String, Set<String>> = dao.allLikes().groupBy({ it.postId }, { it.pubkey }).mapValues { it.value.toSet() }
+    suspend fun likeBy(postId: String, pubkey: String): LikeRow? = dao.likeBy(postId, pubkey)
+    suspend fun unsentLikes(): List<LikeRow> = dao.unsentLikes()
+    suspend fun markLikeSent(id: String) = dao.markLikeSent(id)
+    suspend fun deleteLike(id: String) = dao.deleteLike(id)
+
     suspend fun maintainers(): List<Maintainer> = dao.maintainers().map { Maintainer(it.pubkey, it.enabled) }
 
     suspend fun setMaintainer(pubkey: String, enabled: Boolean) {
@@ -298,6 +313,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         const val MAX_BULLETINS = 100
         const val MAX_PER_AUTHOR = 20
         const val MAX_MAINTAINERS = 5
+        const val MAX_LIKES = 5000
         const val HIDDEN_MESSAGE = "Hidden by a maintainer you follow"
 
         @Volatile private var shared: RoomStore? = null

@@ -68,7 +68,9 @@ fun DiscoverScreen(ui: FreegramUi) {
 
             item { SectionTitle("Recent posts") }
             if (d.posts.isEmpty() && !d.loading) item { Hint("No public Freegram posts found yet. Pull down to try again.") }
-            items(d.posts, key = { "d" + it.id }) { post -> PostCard(post, onClick = { ui.open(post.id) }) }
+            items(d.posts, key = { "d" + it.id }) { post ->
+                PostCard(post, onClick = { ui.open(post.id) }, onLike = { ui.like(post.id, !post.likedByMe) })
+            }
             item {
                 Hint("Recent public posts from Freegram users. Posts hidden by your maintainers, and people you muted or blocked, are left out.",
                     Modifier.fillMaxWidth(), TextAlign.Center)

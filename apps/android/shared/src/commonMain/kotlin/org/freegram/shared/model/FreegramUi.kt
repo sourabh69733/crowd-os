@@ -36,6 +36,11 @@ data class PostUi(
     val source: PostSource,
     val mine: Boolean,
     val followed: Boolean,
+    /** For a reply: the ID of the top-level post it belongs to. Null for top-level posts. */
+    val replyTo: String? = null,
+    val replies: Int = 0,
+    val likes: Int = 0,
+    val likedByMe: Boolean = false,
 )
 
 data class NearbyActivity(val text: String, val time: String)
@@ -167,6 +172,12 @@ interface FreegramUi : SettingsUi {
     fun setShowInDiscover(on: Boolean)
     /** Maintainer action: adds or removes someone from this phone's public suggestion list. */
     fun setSuggested(authorKey: String, on: Boolean)
+
+    /** Replies to the open post's thread, oldest first. */
+    val thread: List<PostUi>
+    fun like(postId: String, on: Boolean)
+    /** Posts a public reply to [postId] (or, for a reply, to its thread). */
+    fun reply(postId: String, text: String)
 }
 
 /** Things only the platform can do (system pickers, permissions, clipboard). */

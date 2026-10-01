@@ -8,6 +8,7 @@ import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Box
 import androidx.compose.foundation.layout.Column
 import androidx.compose.foundation.layout.Row
+import androidx.compose.foundation.layout.Spacer
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.foundation.layout.padding
@@ -74,7 +75,7 @@ fun PhotoView(photo: PhotoUi, maxHeight: Dp = 360.dp) {
 }
 
 @Composable
-fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null) {
+fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null, onLike: (() -> Unit)? = null) {
     val c = Fg.colors
     val base = Modifier.fillMaxWidth().clip(RoundedCornerShape(16.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(16.dp))
     Column(
@@ -97,7 +98,14 @@ fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null)
         }
         if (post.text.isNotBlank()) Text(post.text, color = c.ink, fontSize = 15.sp, lineHeight = 21.sp)
         PhotoView(post.photo)
-        SourceChip(post.source)
+        Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
+            SourceChip(post.source)
+            Spacer(Modifier.weight(1f))
+            Text("${if (post.likedByMe) "♥" else "♡"} ${post.likes}", color = if (post.likedByMe) c.red else c.ink2, fontSize = 14.sp,
+                modifier = Modifier.clip(RoundedCornerShape(8.dp)).then(if (onLike != null) Modifier.clickable(onClick = onLike) else Modifier)
+                    .padding(horizontal = 6.dp, vertical = 2.dp))
+            if (post.replyTo == null) Text("↩ ${post.replies}", color = c.ink2, fontSize = 14.sp)
+        }
     }
 }
 

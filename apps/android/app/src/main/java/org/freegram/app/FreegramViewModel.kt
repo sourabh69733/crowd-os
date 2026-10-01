@@ -33,7 +33,9 @@ import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
+import org.freegram.app.protocol.Likes
 import org.freegram.app.protocol.PhotoRef
+import org.freegram.app.protocol.Replies
 import org.freegram.app.protocol.ProfileEvent
 import org.freegram.app.nearby.NearbyService
 import org.freegram.app.nearby.NearbyState
@@ -139,7 +141,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     override var online by mutableStateOf(false); private set
     override var posts by mutableStateOf<List<PostUi>>(emptyList()); private set
     private var detailId by mutableStateOf<String?>(null)
-    override val selected: PostUi? get() = detailId?.let { id -> posts.firstOrNull { it.id == id } ?: discoverPosts.firstOrNull { it.id == id } }
+    override val selected: PostUi? get() = detailId?.let { id ->
+        posts.firstOrNull { it.id == id } ?: discoverPosts.firstOrNull { it.id == id } ?: threadPosts.firstOrNull { it.id == id }
+    }
     override val draftPhoto: ImageBitmap? get() = pickedPreview
     override var toast by mutableStateOf<String?>(null); private set
     override val reportReasons: List<String> get() = REPORT_REASONS
@@ -157,6 +161,15 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge,
     )
     private var photoBytes by mutableStateOf(0L)
+
+    // ----- Replies and likes -----
+    /** Replies fetched from servers (not stored, so they can't crowd out posts). Stored replies come from posting or Nearby. */
+    private var fetchedReplies by mutableStateOf<Map<String, BulletinEvent>>(emptyMap())
+    private var likeMap by mutableStateOf<Map<String, Set<String>>>(emptyMap())
+    private var replyCounts by mutableStateOf<Map<String, Int>>(emptyMap())
+    private var allReplies by mutableStateOf<List<BulletinEvent>>(emptyList())
+    private var threadPosts by mutableStateOf<List<PostUi>>(emptyList())
+    override val thread: List<PostUi> get() = threadPosts
 
     // ----- Discover -----
     private var discoverEvents by mutableStateOf<List<BulletinEvent>>(emptyList())
@@ -388,7 +401,107 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     }
 
     override fun updateDraft(text: String) { draft = text }
-    override fun open(postId: String) { detailId = postId }
+    override fun open(postId: String) {
+        detailId = postId
+        viewModelScope.launch {
+            rebuildThread()
+            val root = findEvent(postId)?.let { Replies.rootOf(it) } ?: postId
+            if (online) runCatching { fetchThreadsFor(listOf(root)) }
+        }
+    }
+
+    /** A post this phone knows: stored, in Discover, or a fetched reply. */
+    private suspend fun findEvent(id: String): BulletinEvent? =
+        savedEvents.firstOrNull { it.id == id } ?: discoverEvents.firstOrNull { it.id == id } ?: fetchedReplies[id]
+            ?: io { store.savedEvents().firstOrNull { it.id == id } }
+
+    /** Fetches replies and likes for [postIds] from both servers, then refreshes counts and names. */
+    private suspend fun fetchThreadsFor(postIds: List<String>) {
+        if (postIds.isEmpty()) return
+        val found = postIds.distinct().chunked(100).flatMap { ids ->
+            relays.flatMap { relay -> io { relayClient.fetchThreads(relay, ids) }.events }
+        }.distinctBy { it.id }
+        io { found.filter { it.kind == Likes.KIND }.forEach { store.saveLike(it) } }
+        val replies = found.filter { it.kind == 1 }
+        if (replies.isNotEmpty()) {
+            fetchedReplies = (fetchedReplies + replies.associateBy { it.id }).values
+                .sortedByDescending { it.createdAt }.take(MAX_FETCHED_REPLIES).associateBy { it.id }
+        }
+        val unnamed = replies.map { it.pubkey }.distinct().filter { it !in names && it != pubkeyHex }.take(50)
+        if (unnamed.isNotEmpty()) for (relay in relays) {
+            val profiles = io { relayClient.fetchProfiles(relay, unnamed) }.events
+            io { profiles.forEach { store.saveProfile(it) } }
+        }
+        refreshLists()
+    }
+
+    /** Replies under the open post (or, for an open reply, nothing: replies show only under the top-level post). */
+    private suspend fun rebuildThread() {
+        val id = detailId ?: run { threadPosts = emptyList(); return }
+        val followed = authorPolicies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
+        val hops = io { store.hopsById() }
+        val deliveries = io { store.deliveryStates() }
+        threadPosts = io {
+            allReplies.filter { Replies.rootOf(it) == id }.sortedBy { it.createdAt }
+                .map { toPostUi(it, hops[it.id] ?: 0, deliveries[it.id].orEmpty(), followed) }
+        }
+    }
+
+    override fun like(postId: String, on: Boolean) {
+        viewModelScope.launch {
+            try {
+                val me = pubkeyHex
+                if (on) {
+                    val post = findEvent(postId) ?: return@launch
+                    if (io { store.likeBy(postId, me) } != null) return@launch
+                    val like = io { identity.withSecret { Likes.sign(it, post, nowSeconds()) } }
+                    io { store.saveLike(like, mine = true) }
+                    refreshLists()
+                    if (online && publishEverywhere(like)) io { store.markLikeSent(like.id) }
+                } else {
+                    val row = io { store.likeBy(postId, me) } ?: return@launch
+                    io { store.deleteLike(row.id) }
+                    refreshLists()
+                    // A like a server already has needs a signed removal; one never sent just disappears.
+                    if (row.sent && online) {
+                        val like = Nip01Protocol.fromJson(row.wire, Likes.MAX_BYTES)
+                        publishEverywhere(io { identity.withSecret { Likes.signUnlike(it, like, nowSeconds()) } })
+                    }
+                }
+            } catch (failure: Exception) {
+                toast = failure.message ?: "Could not update like"
+            }
+        }
+    }
+
+    /** Sends likes made while offline. */
+    private suspend fun retryLikes() {
+        for (row in io { store.unsentLikes() }) {
+            val like = runCatching { Nip01Protocol.fromJson(row.wire, Likes.MAX_BYTES) }.getOrNull() ?: continue
+            if (publishEverywhere(like)) io { store.markLikeSent(row.id) }
+        }
+    }
+
+    /** True if at least one server accepted [event]. */
+    private suspend fun publishEverywhere(event: BulletinEvent): Boolean =
+        relays.count { relay -> io { runCatching { relayClient.publish(relay, event) }.getOrDefault("Network error") } == "Accepted" } > 0
+
+    override fun reply(postId: String, text: String) {
+        busyAction({ toast = it ?: "Could not reply" }) {
+            require(text.isNotBlank()) { "Write something first" }
+            require(relays.all { it.startsWith("wss://") } && relays.distinct().size == 2) { "Use two distinct wss:// relay URLs" }
+            val parent = findEvent(postId) ?: error("That post isn't on this phone anymore")
+            val rootAuthor = (Replies.rootOf(parent)?.let { findEvent(it) } ?: parent).pubkey
+            val signed = io {
+                identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds(), Replies.tags(parent, rootAuthor)) }
+                    .also { store.saveEvent(it, relays) }
+            }
+            refreshLists()
+            toast = if (online) "Reply posted." else "Reply saved. It goes to nearby phones now and to servers when you're online."
+            deliver(signed)
+            refreshLists()
+        }
+    }
     override fun closeDetail() { detailId = null }
     override fun dismissToast() { toast = null }
     fun showToast(text: String) { toast = text }
@@ -399,6 +512,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
             if (online && following) syncFeed()
             if (online && maintainers.isNotEmpty()) syncHideLists()
             if (online) syncProfiles()
+            if (online) {
+                retryLikes()
+                runCatching { fetchThreadsFor(posts.filter { it.replyTo == null }.map { it.id }.take(100)) }
+            }
             if (io { store.retryableDeliveries(nowSeconds() - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty() }) RelayRetryWorker.schedule(getApplication())
             refreshLists()
             toast = when {
@@ -605,6 +722,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
                 }
                 names = io { store.names() }
                 rebuildDiscover()
+                runCatching { fetchThreadsFor(events.map { it.id }) }
                 val reached = results.any { it.status == "Complete" || it.status == "Event limit reached" }
                 discoverNote = if (reached) "" else "Couldn't reach the servers. Pull down to try again."
             } catch (failure: Exception) {
@@ -629,7 +747,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val followed = policies.filterValues { it == AuthorState.FOLLOWING }.keys
         discoverPosts = io {
             discoverEvents.filter { e ->
-                !hidden.covers(e) && policies[e.pubkey].let { it != AuthorState.BLOCKED && it != AuthorState.MUTED }
+                Replies.rootOf(e) == null && !hidden.covers(e) && policies[e.pubkey].let { it != AuthorState.BLOCKED && it != AuthorState.MUTED }
             }.map { toPostUi(it, 0, emptyList(), followed) }
         }
     }
@@ -712,7 +830,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val authorNpub = npubOf(event.pubkey)
         val label = names[event.pubkey] ?: shortKey(authorNpub)
         return PostUi(event.id, event.pubkey, label, authorNpub.takeLast(4), hueOf(event.pubkey), ago(event.createdAt), event.content, photo, source,
-            mine = event.pubkey == pubkeyHex, followed = event.pubkey in followed)
+            mine = event.pubkey == pubkeyHex, followed = event.pubkey in followed,
+            replyTo = Replies.rootOf(event), replies = replyCounts[event.id] ?: 0,
+            likes = likeMap[event.id]?.size ?: 0, likedByMe = likeMap[event.id]?.contains(pubkeyHex) == true)
     }
 
     private fun thumbnail(sha: String): ImageBitmap? = synchronized(thumbnails) {
@@ -799,6 +919,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     companion object {
         private const val DISCOVER_LIMIT = 50
         private const val MAX_SUGGESTED = 30
+        private const val MAX_FETCHED_REPLIES = 500
         val REPORT_REASONS = listOf("Spam", "Harassment or abuse", "False or dangerous information", "Illegal content", "Other")
     }
 
@@ -993,9 +1114,16 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val hops = io { store.hopsById() }
         val deliveries = io { store.deliveryStates() }
         val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
+        val hiddenNow = io { store.hidden() }
+        val silenced = policies.filter { it.state != AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
+        likeMap = io { store.likes() }.mapValues { (_, who) -> who - silenced }
+        allReplies = (saved + fetchedReplies.values).distinctBy { it.id }
+            .filter { Replies.rootOf(it) != null && it.pubkey !in silenced && !hiddenNow.covers(it) }
+        replyCounts = allReplies.groupingBy { Replies.rootOf(it)!! }.eachCount()
         posts = io { saved.map { toPostUi(it, hops[it.id] ?: 0, deliveries[it.id].orEmpty(), followed) } }
         mySuggestions = io { mySuggestList()?.people.orEmpty() }
         rebuildDiscover()
+        rebuildThread()
     }
 
     private suspend fun syncFeed() {
