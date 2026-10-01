@@ -1,0 +1,27 @@
+{
+  "format": "NIP-01 event ID",
+  "source": "https://github.com/nostr-protocol/nips/blob/master/01.md",
+  "note": "Unsigned serialization/hash fixtures; signatures are tested separately in Phase 1.",
+  "cases": [
+    {
+      "name": "ascii-with-topic",
+      "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "created_at": 1700000000,
+      "kind": 1,
+      "tags": [["t", "freegram"]],
+      "content": "Test bulletin",
+      "serialized": "[0,\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",1700000000,1,[[\"t\",\"freegram\"]],\"Test bulletin\"]",
+      "id": "87927a85387f74afdc8b6fbb3cf6e3d9b42628bf9a9dfa3491e385a1bbc19daf"
+    },
+    {
+      "name": "newline-and-unicode",
+      "pubkey": "f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9",
+      "created_at": 1700000001,
+      "kind": 1,
+      "tags": [],
+      "content": "Line one\nLine two: नमस्ते",
+      "serialized": "[0,\"f9308a019258c31049344f85f89d5229b531c845836f99b08601f113bce036f9\",1700000001,1,[],\"Line one\\nLine two: नमस्ते\"]",
+      "id": "14922752229b478ff8ad81b494d8e9a8c9a52a4093cebbdb86da4496f304f6ae"
+    }
+  ]
+}
