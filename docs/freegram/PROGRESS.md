@@ -19,6 +19,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | Moderation | Maintainers, reports, appeals | 🟡 |
 | New UI | App screens from the approved mockup | ✅ |
 | Release | Signed APK for the website | ✅ 0.2.0 built |
+| Discover | Find people and posts | 🟡 built, 0.3.0 on your phone |
 | Safety for protests | Panic wipe, optional app lock | 🟡 panic wipe done |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
@@ -77,6 +78,12 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] Step 3: Settings pages (backup, people, maintainers, servers, storage)
 - [ ] Walk-through on your phone with feedback
 
+### Discover 🟡
+- [x] Discover tab: maintainer suggestions, recent #freegram posts, search by ID or known name
+- [x] "Show my posts in Discover" switch (on by default)
+- [ ] Check a tagged post shows on a second phone
+- [ ] Default maintainer, so new users see suggestions
+
 ### Release ✅
 - [x] Release key outside the repo (`~/.freegram/`, password in Keychain)
 - [x] Release APK 0.2.0, 6.8 MB, tested on the emulator
@@ -116,6 +123,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 29 Sep | Android only for now; code structured for iPhone later (Kotlin Multiplatform `shared` module). |
 | 29 Sep | Release key kept on your Mac, password in Keychain (option A). |
 | 30 Sep | Panic wipe: yes. App lock: optional only, off by default. |
+| 1 Oct | Discover tab: maintainer suggestions, recent posts, search. Posts opt in with #freegram (on by default). |
 
 ## Next up
 

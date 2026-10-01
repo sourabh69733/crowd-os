@@ -21,7 +21,13 @@ import androidx.compose.ui.graphics.asImageBitmap
 import org.freegram.app.identity.PanicWipe
 import org.freegram.app.identity.ProtectedIdentity
 import org.freegram.app.media.EncodedPhoto
+import kotlinx.coroutines.async
+import kotlinx.coroutines.awaitAll
+import org.freegram.app.moderation.Discover
 import org.freegram.app.moderation.HideList
+import org.freegram.app.moderation.SuggestList
+import org.freegram.shared.model.DiscoverUi
+import org.freegram.shared.model.FoundPersonUi
 import org.freegram.app.moderation.ModerationMessage
 import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.store.Maintainer
@@ -133,7 +139,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     override var online by mutableStateOf(false); private set
     override var posts by mutableStateOf<List<PostUi>>(emptyList()); private set
     private var detailId by mutableStateOf<String?>(null)
-    override val selected: PostUi? get() = detailId?.let { id -> posts.firstOrNull { it.id == id } }
+    override val selected: PostUi? get() = detailId?.let { id -> posts.firstOrNull { it.id == id } ?: discoverPosts.firstOrNull { it.id == id } }
     override val draftPhoto: ImageBitmap? get() = pickedPreview
     override var toast by mutableStateOf<String?>(null); private set
     override val reportReasons: List<String> get() = REPORT_REASONS
@@ -151,6 +157,21 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge,
     )
     private var photoBytes by mutableStateOf(0L)
+
+    // ----- Discover -----
+    private var discoverEvents by mutableStateOf<List<BulletinEvent>>(emptyList())
+    private var discoverPosts by mutableStateOf<List<PostUi>>(emptyList())
+    private var suggestedKeys by mutableStateOf<List<String>>(emptyList())
+    private var discoverLoading by mutableStateOf(false)
+    private var discoverNote by mutableStateOf("")
+    private var discoverOptIn by mutableStateOf(store.showInDiscover())
+    override var mySuggestions by mutableStateOf<Set<String>>(emptySet()); private set
+    override val discover: DiscoverUi get() {
+        val policies = authorPolicies.associate { it.pubkey to it.state }
+        val suggested = suggestedKeys.filter { it != pubkeyHex && policies[it].let { s -> s != AuthorState.BLOCKED && s != AuthorState.MUTED } }
+        return DiscoverUi(discoverPosts, suggested.map { found(it, policies) }, discoverLoading, discoverNote,
+            maintainers.any { it.enabled }, discoverOptIn)
+    }
 
     // ----- Settings screens (SettingsUi) -----
     override val people: List<PersonUi> get() = authorPolicies.map { p ->
@@ -225,7 +246,10 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val photo = pickedPhoto
         val signed = io {
             if (photo != null) media.put(photo.ref.sha256, photo.bytes, referencedPhotos() + photo.ref.sha256)
-            val tags = if (photo != null) arrayOf(photo.ref.toTag()) else emptyArray()
+            val tags = buildList {
+                if (photo != null) add(photo.ref.toTag())
+                if (discoverOptIn) add(Discover.tag())
+            }.toTypedArray()
             identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds(), tags) }.also {
                 store.saveEvent(it, relays)
                 store.saveDraft("")
@@ -400,7 +424,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     override fun deleteLocal(postId: String) {
         busyAction({ toast = it ?: "Could not delete" }) {
-            val event = io { store.savedEvents() }.firstOrNull { it.id == postId } ?: return@busyAction
+            val event = io { store.savedEvents() }.firstOrNull { it.id == postId }
+            if (event == null) { toast = "This post isn't saved on this phone."; return@busyAction }
             io {
                 store.deleteLocal(event.id)
                 PhotoRef.of(event)?.let { media.removeIfUnused(it.sha256, referencedPhotos()) }
@@ -559,6 +584,100 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         }
     }
 
+    override fun loadDiscover() {
+        if (discoverLoading) return
+        if (!online) { discoverNote = "No internet. Discover needs internet; Nearby works without it."; return }
+        viewModelScope.launch {
+            discoverLoading = true
+            try {
+                val now = nowSeconds()
+                val results = relays.map { relay -> async { io { relayClient.fetchDiscover(relay, nowSeconds = now) } } }.awaitAll()
+                val events = results.flatMap { it.events }.distinctBy { it.id }.sortedByDescending { it.createdAt }.take(DISCOVER_LIMIT)
+                val keys = maintainers.filter { it.enabled }.map { it.pubkey }
+                val suggestions = if (keys.isEmpty()) emptyList() else fetchSuggestions(keys)
+                discoverEvents = events
+                suggestedKeys = suggestions
+                // Names for new faces, so cards don't show only IDs.
+                val unnamed = (events.map { it.pubkey } + suggestions).distinct().filter { it !in names }.take(50)
+                if (unnamed.isNotEmpty()) for (relay in relays) {
+                    val found = io { relayClient.fetchProfiles(relay, unnamed) }.events
+                    io { found.forEach { store.saveProfile(it) } }
+                }
+                names = io { store.names() }
+                rebuildDiscover()
+                val reached = results.any { it.status == "Complete" || it.status == "Event limit reached" }
+                discoverNote = if (reached) "" else "Couldn't reach the servers. Pull down to try again."
+            } catch (failure: Exception) {
+                discoverNote = failure.message ?: "Couldn't load Discover"
+            } finally { discoverLoading = false }
+        }
+    }
+
+    /** People suggested by [maintainers], newest list per maintainer, in maintainer order. */
+    private suspend fun fetchSuggestions(maintainers: List<String>): List<String> {
+        val lists = relays.flatMap { relay -> io { relayClient.fetchSuggestions(relay, maintainers) }.events }
+            .mapNotNull { SuggestList.of(it) }
+            .groupBy { it.maintainer }.mapValues { (_, all) -> all.maxBy { it.createdAt } }
+        return maintainers.flatMap { lists[it]?.people?.sorted().orEmpty() }.distinct().take(MAX_SUGGESTED)
+    }
+
+    /** Re-applies hide lists and mute/block to the fetched Discover posts. */
+    private suspend fun rebuildDiscover() {
+        if (discoverEvents.isEmpty()) { discoverPosts = emptyList(); return }
+        val hidden = io { store.hidden() }
+        val policies = authorPolicies.associate { it.pubkey to it.state }
+        val followed = policies.filterValues { it == AuthorState.FOLLOWING }.keys
+        discoverPosts = io {
+            discoverEvents.filter { e ->
+                !hidden.covers(e) && policies[e.pubkey].let { it != AuthorState.BLOCKED && it != AuthorState.MUTED }
+            }.map { toPostUi(it, 0, emptyList(), followed) }
+        }
+    }
+
+    override fun searchPeople(query: String): List<FoundPersonUi> {
+        val q = query.trim()
+        val policies = authorPolicies.associate { it.pubkey to it.state }
+        if (q.startsWith("npub1", ignoreCase = true)) {
+            return listOfNotNull(runCatching { parseKey(q) }.getOrNull()?.takeIf { it != pubkeyHex }?.let { found(it, policies) })
+        }
+        if (q.length < 2) return emptyList()
+        return names.filter { (key, name) -> key != pubkeyHex && policies[key] != AuthorState.BLOCKED && name.contains(q, ignoreCase = true) }
+            .keys.take(20).map { found(it, policies) }
+    }
+
+    private fun found(key: String, policies: Map<String, AuthorState>): FoundPersonUi {
+        val latest = (discoverEvents.asSequence() + savedEvents.asSequence()).firstOrNull { it.pubkey == key && it.content.isNotBlank() }
+        return FoundPersonUi(key, labelOf(key), npubOf(key).takeLast(4), hueOf(key), policies[key] == AuthorState.FOLLOWING,
+            latest?.content?.take(140))
+    }
+
+    override fun setShowInDiscover(on: Boolean) {
+        store.setShowInDiscover(on)
+        discoverOptIn = on
+        toast = if (on) "New posts will show in Discover." else "New posts won't be tagged for Discover. They're still public."
+    }
+
+    override fun setSuggested(authorKey: String, on: Boolean) {
+        busyAction({ toast = it ?: "Could not update suggestions" }) {
+            val me = pubkeyHex
+            val signed = io {
+                val current = mySuggestList()
+                val people = current?.people.orEmpty().let { if (on) it + authorKey else it - authorKey }
+                require(people.size <= SuggestList.MAX_PEOPLE) { "Suggestion list is full" }
+                val at = maxOf(nowSeconds(), (current?.createdAt ?: 0) + 1)
+                identity.withSecret { Nip01Protocol.signEvent(it, SuggestList.KIND, "", at, SuggestList(me, at, people).toTags()) }
+                    .also { store.setMySuggestList(Nip01Protocol.toJson(it)) }
+            }
+            mySuggestions = SuggestList.of(signed)?.people.orEmpty()
+            val accepted = relays.count { relay -> io { runCatching { relayClient.publish(relay, signed) }.getOrDefault("Network error") } == "Accepted" }
+            toast = (if (on) "Suggested in Discover" else "No longer suggested") +
+                if (accepted > 0) "." else ". No server reached yet; change it again when online to resend."
+        }
+    }
+
+    private fun mySuggestList(): SuggestList? = store.mySuggestList()
+        ?.let { wire -> runCatching { SuggestList.of(Nip01Protocol.fromJson(wire, SuggestList.MAX_BYTES)) }.getOrNull() }
+
     override fun panicWipe() {
         // Stop radio first so nothing is being written while data is cleared.
         runCatching { NearbyService.stop(getApplication()) }
@@ -678,6 +797,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private fun hueOf(hex: String) = if (hex.length >= 4) (hex.take(4).toInt(16) % 360).toFloat() else 200f
 
     companion object {
+        private const val DISCOVER_LIMIT = 50
+        private const val MAX_SUGGESTED = 30
         val REPORT_REASONS = listOf("Spam", "Harassment or abuse", "False or dangerous information", "Illegal content", "Other")
     }
 
@@ -873,6 +994,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val deliveries = io { store.deliveryStates() }
         val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
         posts = io { saved.map { toPostUi(it, hops[it.id] ?: 0, deliveries[it.id].orEmpty(), followed) } }
+        mySuggestions = io { mySuggestList()?.people.orEmpty() }
+        rebuildDiscover()
     }
 
     private suspend fun syncFeed() {

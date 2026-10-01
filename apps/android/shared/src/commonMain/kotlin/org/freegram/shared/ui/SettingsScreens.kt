@@ -56,7 +56,7 @@ enum class SettingsDest(val title: String) {
 private const val MIN_PASSWORD = 10
 
 @Composable
-fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<SettingsPage>) {
+fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<SettingsPage>, onBack: () -> Unit) {
     var dest by remember { mutableStateOf<SettingsDest?>(null) }
     var extra by remember { mutableStateOf<SettingsPage?>(null) }
     dest?.let { SettingsDestination(ui, platform, it) { dest = null }; return }
@@ -64,8 +64,10 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
     val following = ui.people.count { it.state == PersonState.Following }
     val s = ui.storageInfo
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp), verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.size(8.dp))
-        Title("Settings")
+        Row(verticalAlignment = Alignment.CenterVertically) {
+            IconButton(onClick = onBack) { Icon(FgIcons.Back, contentDescription = "Back", tint = Fg.colors.ink) }
+            Title("Settings")
+        }
         ListBox {
             ListRow("Backup and key", if (ui.me.backupDone) "✓ Encrypted backup made" else "Not backed up yet", highlight = !ui.me.backupDone) { dest = SettingsDest.Backup }
             ListRow("People you follow", "$following following · ${ui.people.size - following} muted or blocked") { dest = SettingsDest.People }
@@ -75,9 +77,24 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
             ListRow("Servers", "${ui.relayUrls.size} servers") { dest = SettingsDest.Servers }
             ListRow("Storage", "${s.posts} of ${s.maxPosts} posts · ${mb(s.photoBytes)} of ${mb(s.maxPhotoBytes)} photos") { dest = SettingsDest.Storage }
         }
+        ToggleRow("Show my posts in Discover", "New posts get a #freegram tag so people can find them. They're public either way.",
+            ui.discover.showMyPosts, ui::setShowInDiscover)
         ListBox { ListRow("Panic wipe", "Erase Freegram from this phone in seconds") { dest = SettingsDest.Wipe } }
         if (extraPages.isNotEmpty()) ListBox { extraPages.forEach { p -> ListRow(p.title, p.subtitle) { extra = p } } }
         Hint("Freegram prototype · not for safety-critical use yet.")
+    }
+}
+
+@Composable
+private fun ToggleRow(title: String, hint: String, on: Boolean, onChange: (Boolean) -> Unit) {
+    val c = Fg.colors
+    Row(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(14.dp)).padding(14.dp),
+        verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(12.dp)) {
+        Column(Modifier.weight(1f)) {
+            Text(title, color = c.ink, fontSize = 14.sp)
+            Text(hint, color = c.ink3, fontSize = 12.sp)
+        }
+        Switch(on, onChange, colors = SwitchDefaults.colors(checkedTrackColor = c.teal))
     }
 }
 

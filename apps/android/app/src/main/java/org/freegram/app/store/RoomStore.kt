@@ -102,6 +102,14 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     fun pendingProfile(): String? = prefs.getString("pending_profile", null)
     fun setPendingProfile(wire: String?) { check(prefs.edit().apply { if (wire == null) remove("pending_profile") else putString("pending_profile", wire) }.commit()) }
 
+    /** Whether new posts carry the Discover tag. On by default; posts are public either way. */
+    fun showInDiscover(): Boolean = prefs.getBoolean("show_in_discover", true)
+    fun setShowInDiscover(on: Boolean) { check(prefs.edit().putBoolean("show_in_discover", on).commit()) }
+
+    /** This phone's own signed Discover suggestion list (maintainers only), or null. */
+    fun mySuggestList(): String? = prefs.getString("my_suggest_list", null)
+    fun setMySuggestList(wire: String) { check(prefs.edit().putString("my_suggest_list", wire).commit()) }
+
     fun onboarded(): Boolean = prefs.getBoolean("onboarded", false)
     fun setOnboarded() { check(prefs.edit().putBoolean("onboarded", true).commit()) }
 

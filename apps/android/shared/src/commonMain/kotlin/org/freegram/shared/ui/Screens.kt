@@ -166,7 +166,12 @@ private fun PostMenu(ui: FreegramUi, post: PostUi, onReport: () -> Unit, onDone:
             if (ui.canReport) MenuRow(FgIcons.Flag, "Report to maintainers", "Private. Only your maintainers can read it.", onClick = onReport)
             MenuRow(FgIcons.Mute, "Mute ${post.authorLabel}", "Hide their posts on this phone") { ui.mute(post.authorKey); onDone() }
             MenuRow(FgIcons.Block, "Block ${post.authorLabel}", "Hide and never pass on their posts") { ui.block(post.authorKey); onDone() }
-            if (ui.isMaintainer) MenuRow(FgIcons.Hide, "Hide for my followers", "Maintainers only · public list") { ui.hideForFollowers(post.id); onDone() }
+            if (ui.isMaintainer) {
+                val suggested = post.authorKey in ui.mySuggestions
+                MenuRow(FgIcons.Star, if (suggested) "Stop suggesting ${post.authorLabel}" else "Suggest ${post.authorLabel} in Discover",
+                    "Maintainers only · public list") { ui.setSuggested(post.authorKey, !suggested); onDone() }
+                MenuRow(FgIcons.Hide, "Hide for my followers", "Maintainers only · public list") { ui.hideForFollowers(post.id); onDone() }
+            }
         }
         MenuRow(FgIcons.Trash, "Delete from this phone", "Copies on servers and other phones stay", danger = true) { ui.deleteLocal(post.id); onDone() }
     }
@@ -287,14 +292,16 @@ fun NearbyScreen(ui: FreegramUi, platform: PlatformActions) {
 // ---------- Profile ----------
 
 @Composable
-fun ProfileScreen(ui: FreegramUi, platform: PlatformActions, pages: List<SettingsPage>) {
+fun ProfileScreen(ui: FreegramUi, platform: PlatformActions, onSettings: () -> Unit) {
     val c = Fg.colors
     var open by remember { mutableStateOf<SettingsDest?>(null) }
     var editing by remember { mutableStateOf(false) }
     open?.let { dest -> SettingsDestination(ui, platform, dest) { open = null }; return }
     Column(Modifier.fillMaxSize().verticalScroll(rememberScrollState()).then(Gutter).padding(bottom = 96.dp),
         horizontalAlignment = Alignment.CenterHorizontally, verticalArrangement = Arrangement.spacedBy(12.dp)) {
-        Spacer(Modifier.size(8.dp))
+        Row(Modifier.fillMaxWidth(), horizontalArrangement = Arrangement.End) {
+            IconButton(onClick = onSettings) { Icon(FgIcons.Settings, contentDescription = "Settings", tint = c.ink) }
+        }
         Avatar(ui.me.label, ui.me.hue, 72.dp)
         if (editing) {
             var name by remember { mutableStateOf(ui.me.name) }

@@ -32,7 +32,7 @@ import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
 
 enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Home", FgIcons.Home), Nearby("Nearby", FgIcons.Nearby), Compose("Post", FgIcons.Plus),
+    Home("Home", FgIcons.Home), Discover("Discover", FgIcons.Discover), Nearby("Nearby", FgIcons.Nearby), Compose("Post", FgIcons.Plus),
     Profile("Profile", FgIcons.Profile), Settings("Settings", FgIcons.Settings)
 }
 
@@ -45,7 +45,7 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
         val snackbar = remember { SnackbarHostState() }
         // Back from another tab returns to Home before leaving the app.
         @OptIn(ExperimentalComposeUiApi::class)
-        BackHandler(enabled = ui.selected == null && tab != Tab.Home && tab != Tab.Compose) { tab = Tab.Home }
+        BackHandler(enabled = ui.selected == null && tab != Tab.Home && tab != Tab.Compose) { tab = if (tab == Tab.Settings) Tab.Profile else Tab.Home }
         LaunchedEffect(ui.toast) {
             ui.toast?.let { snackbar.showSnackbar(it); ui.dismissToast() }
         }
@@ -64,9 +64,10 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
             },
             bottomBar = {
                 if (ui.selected == null) NavigationBar(containerColor = c.surface) {
-                    listOf(Tab.Home, Tab.Nearby, Tab.Profile, Tab.Settings).forEach { t ->
+                    // Settings opens from the gear on Profile, so it highlights Profile here.
+                    listOf(Tab.Home, Tab.Discover, Tab.Nearby, Tab.Profile).forEach { t ->
                         NavigationBarItem(
-                            selected = tab == t, onClick = { tab = t },
+                            selected = tab == t || (t == Tab.Profile && tab == Tab.Settings), onClick = { tab = t },
                             icon = { Icon(t.icon, contentDescription = null) }, label = { Text(t.label) },
                             colors = NavigationBarItemDefaults.colors(selectedIconColor = c.teal, selectedTextColor = c.teal,
                                 indicatorColor = c.tealSoft, unselectedIconColor = c.ink3, unselectedTextColor = c.ink3),
@@ -80,10 +81,11 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
                 when {
                     selected != null -> PostDetailScreen(ui, selected)
                     tab == Tab.Home -> HomeScreen(ui)
+                    tab == Tab.Discover -> DiscoverScreen(ui)
                     tab == Tab.Nearby -> NearbyScreen(ui, platform)
                     tab == Tab.Compose -> ComposeScreen(ui, platform, onDone = { tab = Tab.Home })
-                    tab == Tab.Profile -> ProfileScreen(ui, platform, settingsPages)
-                    tab == Tab.Settings -> SettingsScreen(ui, platform, settingsPages)
+                    tab == Tab.Profile -> ProfileScreen(ui, platform, onSettings = { tab = Tab.Settings })
+                    tab == Tab.Settings -> SettingsScreen(ui, platform, settingsPages, onBack = { tab = Tab.Profile })
                 }
             }
         }

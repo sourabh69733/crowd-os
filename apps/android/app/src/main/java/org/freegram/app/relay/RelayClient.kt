@@ -7,7 +7,9 @@ import okhttp3.Request
 import okhttp3.Response
 import okhttp3.WebSocket
 import okhttp3.WebSocketListener
+import org.freegram.app.moderation.Discover
 import org.freegram.app.moderation.HideList
+import org.freegram.app.moderation.SuggestList
 import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.protocol.BulletinEvent
 import org.json.JSONObject
@@ -101,6 +103,23 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
         return fetchSigned(relay, filter, ProfileEvent.MAX_BYTES, authors.size * 3) { it.pubkey in wanted && it.kind == ProfileEvent.KIND }
     }
 
+    /** Newest public posts tagged for Discover, each signature-checked and not dated in the future. */
+    suspend fun fetchDiscover(relay: String, limit: Int = 50, nowSeconds: Long = System.currentTimeMillis() / 1000): AuthorFetchResult {
+        val filter = JSONObject().put("kinds", JSONArray().put(1)).put("#t", JSONArray().put(Discover.TAG)).put("limit", limit)
+        return fetchSigned(relay, filter, 4096, limit) {
+            Nip01Protocol.verifyBulletin(it) && Discover.isTagged(it) && it.createdAt <= nowSeconds + 600
+        }
+    }
+
+    /** Newest Discover suggestion list per maintainer; each is signature-checked. */
+    suspend fun fetchSuggestions(relay: String, maintainers: List<String>): AuthorFetchResult {
+        require(maintainers.isNotEmpty())
+        val wanted = maintainers.toSet()
+        val filter = JSONObject().put("kinds", JSONArray().put(SuggestList.KIND)).put("authors", JSONArray(maintainers))
+            .put("#d", JSONArray().put(SuggestList.D_TAG)).put("limit", maintainers.size * 2)
+        return fetchSigned(relay, filter, SuggestList.MAX_BYTES, maintainers.size * 4) { it.pubkey in wanted && SuggestList.of(it) != null }
+    }
+
     /** Gift-wrapped private messages addressed to [recipient]; only the outer signature is checked here. */
     suspend fun fetchWraps(relay: String, recipient: String, limit: Int = 100): AuthorFetchResult {
         val filter = JSONObject().put("kinds", JSONArray().put(PrivateMessages.WRAP_KIND))
@@ -161,6 +180,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
             Nip01Protocol.verifyBulletin(event) ||
                 (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) ||
                 (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES)) ||
+                (SuggestList.of(event) != null && Nip01Protocol.verifySigned(event, SuggestList.MAX_BYTES)) ||
                 ProfileEvent.nameOf(event) != null
         )
         return withTimeoutOrNull(12_000) {

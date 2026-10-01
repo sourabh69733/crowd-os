@@ -55,6 +55,22 @@ data class MeUi(val label: String, val name: String, val npub: String, val tag: 
 data class PersonUi(val key: String, val label: String, val tag: String, val hue: Float, val state: PersonState)
 enum class PersonState { Following, Muted, Blocked }
 
+/** Someone shown in Discover or search results. [latest] is their newest post text this phone has seen. */
+data class FoundPersonUi(val key: String, val label: String, val tag: String, val hue: Float, val following: Boolean, val latest: String?)
+
+data class DiscoverUi(
+    /** Newest public Freegram posts from servers; hidden, muted and blocked ones are left out. */
+    val posts: List<PostUi>,
+    /** People suggested by the maintainers this phone follows. */
+    val suggested: List<FoundPersonUi>,
+    val loading: Boolean,
+    /** Plain-language note about the last load (e.g. no internet); empty when fine. */
+    val note: String,
+    val hasMaintainers: Boolean,
+    /** Whether this phone's new posts are tagged to appear in Discover. */
+    val showMyPosts: Boolean,
+)
+
 data class MaintainerUi(val key: String, val label: String, val tag: String, val hue: Float, val enabled: Boolean, val isMe: Boolean)
 
 data class InboxItemUi(val isReport: Boolean, val fromLabel: String, val reason: String, val note: String, val postId: String?, val time: String, val alreadyHidden: Boolean)
@@ -141,6 +157,16 @@ interface FreegramUi : SettingsUi {
     fun createBackup(password: String)
     fun restoreBackup(backup: String, password: String)
     fun finishOnboarding()
+
+    val discover: DiscoverUi
+    /** People this maintainer suggests in Discover. Empty unless this phone is a maintainer. */
+    val mySuggestions: Set<String>
+    fun loadDiscover()
+    /** People matching an ID or a name this phone has seen. */
+    fun searchPeople(query: String): List<FoundPersonUi>
+    fun setShowInDiscover(on: Boolean)
+    /** Maintainer action: adds or removes someone from this phone's public suggestion list. */
+    fun setSuggested(authorKey: String, on: Boolean)
 }
 
 /** Things only the platform can do (system pickers, permissions, clipboard). */
