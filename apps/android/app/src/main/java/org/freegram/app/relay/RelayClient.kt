@@ -12,6 +12,9 @@ import org.freegram.app.moderation.HideList
 import org.freegram.app.moderation.SuggestList
 import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.protocol.BulletinEvent
+import org.freegram.app.protocol.AccountDeletion
+import org.freegram.app.protocol.Likes
+import org.freegram.app.protocol.Replies
 import org.json.JSONObject
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.ProfileEvent
@@ -120,6 +123,20 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
         return fetchSigned(relay, filter, SuggestList.MAX_BYTES, maintainers.size * 4) { it.pubkey in wanted && SuggestList.of(it) != null }
     }
 
+    /** Replies (kind 1) and likes (kind 7) pointing at [postIds]; each is signature-checked. */
+    suspend fun fetchThreads(relay: String, postIds: List<String>, limit: Int = 500): AuthorFetchResult {
+        require(postIds.isNotEmpty())
+        val wanted = postIds.toSet()
+        val filter = JSONObject().put("kinds", JSONArray().put(1).put(Likes.KIND)).put("#e", JSONArray(postIds)).put("limit", limit)
+        return fetchSigned(relay, filter, 4096, limit) { event ->
+            when (event.kind) {
+                1 -> Nip01Protocol.verifyBulletin(event) && Replies.rootOf(event) in wanted
+                Likes.KIND -> Likes.likedPost(event) in wanted
+                else -> false
+            }
+        }
+    }
+
     /** Gift-wrapped private messages addressed to [recipient]; only the outer signature is checked here. */
     suspend fun fetchWraps(relay: String, recipient: String, limit: Int = 100): AuthorFetchResult {
         val filter = JSONObject().put("kinds", JSONArray().put(PrivateMessages.WRAP_KIND))
@@ -181,6 +198,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                 (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) ||
                 (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES)) ||
                 (SuggestList.of(event) != null && Nip01Protocol.verifySigned(event, SuggestList.MAX_BYTES)) ||
+                Likes.likedPost(event) != null || Likes.isUnlike(event) || AccountDeletion.isRequest(event) ||
                 ProfileEvent.nameOf(event) != null
         )
         return withTimeoutOrNull(12_000) {

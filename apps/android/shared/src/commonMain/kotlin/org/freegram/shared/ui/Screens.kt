@@ -81,7 +81,9 @@ internal fun Hint(text: String, modifier: Modifier = Modifier, align: TextAlign 
 fun HomeScreen(ui: FreegramUi) {
     val c = Fg.colors
     var followingOnly by rememberSaveable { mutableStateOf(true) }
-    val posts = if (followingOnly) ui.posts.filter { it.followed || it.mine } else ui.posts
+    // Replies show under their post, not in the feed.
+    val topLevel = ui.posts.filter { it.replyTo == null }
+    val posts = if (followingOnly) topLevel.filter { it.followed || it.mine } else topLevel
     PullToRefreshBox(isRefreshing = ui.busy, onRefresh = ui::refresh, modifier = Modifier.fillMaxSize()) {
         LazyColumn(Modifier.fillMaxSize(), contentPadding = androidx.compose.foundation.layout.PaddingValues(16.dp, 8.dp, 16.dp, 96.dp),
             verticalArrangement = Arrangement.spacedBy(12.dp)) {
@@ -108,7 +110,9 @@ fun HomeScreen(ui: FreegramUi) {
                 Hint(if (followingOnly) "No posts from people you follow yet. Follow someone from a post, or switch to Everything on this phone."
                 else "No posts yet. Write one, or start Nearby sharing to receive posts from phones around you.", Modifier.padding(top = 24.dp), TextAlign.Center)
             }
-            items(posts, key = { it.id }) { post -> PostCard(post, onClick = { ui.open(post.id) }) }
+            items(posts, key = { it.id }) { post ->
+                PostCard(post, onClick = { ui.open(post.id) }, onLike = { ui.like(post.id, !post.likedByMe) })
+            }
             item { Hint("Pull down to check servers for new posts.", Modifier.fillMaxWidth(), TextAlign.Center) }
         }
     }
@@ -127,7 +131,13 @@ fun PostDetailScreen(ui: FreegramUi, post: PostUi) {
             IconButton(onClick = ui::closeDetail) { Icon(FgIcons.Back, contentDescription = "Back", tint = c.ink) }
             Text("Post", fontWeight = FontWeight.SemiBold, color = c.ink, modifier = Modifier.weight(1f))
         }
-        PostCard(post, onClick = null, onMore = { sheet = "menu" })
+        val root = post.replyTo?.let { id -> (ui.posts + ui.discover.posts).firstOrNull { it.id == id } }
+        if (post.replyTo != null) {
+            Text(if (root != null) "Reply to ${root.authorLabel} · open the post" else "A reply. The original post isn't on this phone.",
+                color = if (root != null) c.teal else c.ink3, fontSize = 13.sp, fontWeight = FontWeight.SemiBold,
+                modifier = if (root != null) Modifier.clickable { ui.open(root.id) }.padding(vertical = 4.dp) else Modifier)
+        }
+        PostCard(post, onClick = null, onMore = { sheet = "menu" }, onLike = { ui.like(post.id, !post.likedByMe) })
         var explain by remember { mutableStateOf(false) }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(14.dp))
             .clickable { explain = !explain }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -139,6 +149,21 @@ fun PostDetailScreen(ui: FreegramUi, post: PostUi) {
             }
         }
         if (!post.mine && !post.followed) FgButton("Follow ${post.authorLabel}", onClick = { ui.follow(post.authorKey) }, secondary = true)
+        if (post.replyTo == null) {
+            Text(if (ui.thread.isEmpty()) "Replies" else "Replies (${ui.thread.size})", fontSize = 17.sp, fontWeight = FontWeight.ExtraBold, color = c.ink,
+                modifier = Modifier.padding(top = 4.dp))
+            if (ui.thread.isEmpty()) Hint("No replies yet.")
+            ui.thread.forEach { reply ->
+                PostCard(reply, onClick = { ui.open(reply.id) }, onLike = { ui.like(reply.id, !reply.likedByMe) })
+            }
+        }
+        var replyText by remember(post.id) { mutableStateOf("") }
+        OutlinedTextField(replyText, { replyText = it }, label = { Text("Write a reply") }, modifier = Modifier.fillMaxWidth(), enabled = ui.ready)
+        val bytes = replyText.encodeToByteArray().size
+        if (bytes > 2048) Text("Too long: $bytes / 2048", color = c.red, fontSize = 13.sp)
+        FgButton("Reply", onClick = { ui.reply(post.id, replyText.trim()); replyText = "" },
+            enabled = replyText.isNotBlank() && bytes <= 2048 && !ui.busy)
+        Hint("Replies are public, like posts. They reach nearby phones and servers the same way.")
     }
     if (sheet != null) ModalBottomSheet(onDismissRequest = { sheet = null }, containerColor = c.surface) {
         if (sheet == "menu") PostMenu(ui, post, onReport = { sheet = "report" }, onDone = { sheet = null })

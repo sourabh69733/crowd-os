@@ -46,6 +46,15 @@ data class HideListRow(@PrimaryKey val maintainer: String, val createdAt: Long, 
 @Entity(tableName = "profiles")
 data class ProfileRow(@PrimaryKey val pubkey: String, val createdAt: Long, val name: String)
 
+/** A verified like (NIP-25 reaction). [mine]: made on this phone; [sent]: a server accepted it. */
+@Entity(tableName = "likes", indices = [Index("postId")])
+data class LikeRow(
+    @PrimaryKey val id: String, val postId: String, val pubkey: String, val createdAt: Long, val wire: String,
+    @ColumnInfo(defaultValue = "0") val mine: Boolean = false, @ColumnInfo(defaultValue = "0") val sent: Boolean = false,
+)
+
+data class PostLikes(val postId: String, val pubkey: String)
+
 /** A removable bulletin: settled outbox, or someone else's post (received, or carried from nearby even if still queued). */
 data class EvictionCandidate(val id: String, val createdAt: Long, val wire: String, val targets: Int, val hops: Int)
 
@@ -91,12 +100,20 @@ interface BulletinDao {
     @Query("SELECT * FROM hide_lists") suspend fun hideLists(): List<HideListRow>
     @Insert(onConflict = OnConflictStrategy.REPLACE) suspend fun setHideList(row: HideListRow)
     @Query("DELETE FROM hide_lists WHERE maintainer = :pubkey") suspend fun removeHideList(pubkey: String)
+    @Insert(onConflict = OnConflictStrategy.IGNORE) suspend fun insertLike(row: LikeRow)
+    @Query("SELECT postId, pubkey FROM likes") suspend fun allLikes(): List<PostLikes>
+    @Query("SELECT * FROM likes WHERE postId = :postId AND pubkey = :pubkey LIMIT 1") suspend fun likeBy(postId: String, pubkey: String): LikeRow?
+    @Query("SELECT * FROM likes WHERE mine = 1 AND sent = 0") suspend fun unsentLikes(): List<LikeRow>
+    @Query("SELECT id FROM likes WHERE mine = 1") suspend fun myLikeIds(): List<String>
+    @Query("UPDATE likes SET sent = 1 WHERE id = :id") suspend fun markLikeSent(id: String)
+    @Query("DELETE FROM likes WHERE id = :id") suspend fun deleteLike(id: String)
+    @Query("DELETE FROM likes WHERE mine = 0 AND id NOT IN (SELECT id FROM likes ORDER BY createdAt DESC LIMIT :keep)") suspend fun pruneLikes(keep: Int)
 }
 
 @Database(
-    entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class, MaintainerRow::class, HideListRow::class, ProfileRow::class],
-    version = 5,
-    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5)],
+    entities = [BulletinRow::class, RelayDeliveryRow::class, DraftRow::class, AuthorPolicyRow::class, MaintainerRow::class, HideListRow::class, ProfileRow::class, LikeRow::class],
+    version = 6,
+    autoMigrations = [AutoMigration(from = 1, to = 2), AutoMigration(from = 2, to = 3), AutoMigration(from = 3, to = 4), AutoMigration(from = 4, to = 5), AutoMigration(from = 5, to = 6)],
     exportSchema = true,
 )
 abstract class FreegramDatabase : RoomDatabase() {

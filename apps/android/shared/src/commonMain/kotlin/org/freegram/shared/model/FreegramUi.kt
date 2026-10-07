@@ -36,6 +36,11 @@ data class PostUi(
     val source: PostSource,
     val mine: Boolean,
     val followed: Boolean,
+    /** For a reply: the ID of the top-level post it belongs to. Null for top-level posts. */
+    val replyTo: String? = null,
+    val replies: Int = 0,
+    val likes: Int = 0,
+    val likedByMe: Boolean = false,
 )
 
 data class NearbyActivity(val text: String, val time: String)
@@ -111,6 +116,8 @@ interface SettingsUi {
     fun replaceKeyNow()
     /** Erases this phone's ID, posts, photos and lists, then closes the app. Cannot be undone without a backup. */
     fun panicWipe()
+    /** Asks servers to delete this ID's posts, likes and name (NIP-09), then erases the phone as [panicWipe] does. */
+    fun deleteAccount()
 }
 
 /** A page reached from Settings. Its content comes from the platform app. */
@@ -167,6 +174,12 @@ interface FreegramUi : SettingsUi {
     fun setShowInDiscover(on: Boolean)
     /** Maintainer action: adds or removes someone from this phone's public suggestion list. */
     fun setSuggested(authorKey: String, on: Boolean)
+
+    /** Replies to the open post's thread, oldest first. */
+    val thread: List<PostUi>
+    fun like(postId: String, on: Boolean)
+    /** Posts a public reply to [postId] (or, for a reply, to its thread). */
+    fun reply(postId: String, text: String)
 }
 
 /** Things only the platform can do (system pickers, permissions, clipboard). */

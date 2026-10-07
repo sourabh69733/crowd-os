@@ -20,6 +20,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | New UI | App screens from the approved mockup | ✅ |
 | Release | Signed APK for the website | ✅ 0.2.0 built |
 | Discover | Find people and posts | 🟡 built, 0.3.0 on your phone |
+| Replies and likes | Answer and react to posts | 🟡 built, 0.4.0 |
 | Safety for protests | Panic wipe, optional app lock | 🟡 panic wipe done |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
@@ -84,22 +85,30 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] Check a tagged post shows on a second phone
 - [ ] Default maintainer, so new users see suggestions
 
+### Replies and likes 🟡
+- [x] Replies (NIP-10) and likes (NIP-25), counts on every post, thread under each post
+- [ ] Checked on your phones
+- [ ] Likes over Nearby
+
 ### Release ✅
 - [x] Release key outside the repo (`~/.freegram/`, password in Keychain)
 - [x] Release APK 0.2.0, 6.8 MB, tested on the emulator
 - [x] App icon
 - [ ] You back up the release key and its password
 - [ ] APK on your website
+- [x] Play launch prep (7 October): target Android 16, AAB build, terms in app, Delete my account, default maintainer hook, privacy policy, listing, data safety ([play/README.md](play/README.md))
+- [ ] Your ID as default maintainer
+- [ ] Play: upload own signing key, closed test with 12+ testers for 14 days, apply for production
 
 ### Safety for protests 🟡
 - [x] Panic wipe: hold 2 seconds in Settings; erases ID, posts, photos and lists (checked on the emulator)
 - [ ] Optional app lock (PIN or fingerprint), off by default
-- [ ] Encrypt local data so a wipe also defeats forensic recovery
+- [ ] Encrypt local data: deferred; build only together with the optional app lock (Android 10+ already encrypts each file, so a wipe already defeats most recovery)
 - [ ] Optional disguised icon and name
 
 ### 6. Field pilot ⬜
 - [x] Code and security review (30 September): 4 fixes, see [STATUS_LOG.md](STATUS_LOG.md)
-- [ ] Merge to `main`
+- [x] Merged to `main` (1 October)
 - [x] Principles doc, draft 1 ([PRINCIPLES.md](PRINCIPLES.md)): content rules, safety by design, maintainer role, 12 legal questions
 - [ ] Your answers to its open decisions; lawyer review
 - [ ] Small real group, one maintainer
@@ -123,6 +132,8 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 29 Sep | Android only for now; code structured for iPhone later (Kotlin Multiplatform `shared` module). |
 | 29 Sep | Release key kept on your Mac, password in Keychain (option A). |
 | 30 Sep | Panic wipe: yes. App lock: optional only, off by default. |
+| 7 Oct | Google Play first (account bought); Apple later, when the iPhone app is ready. A web app may come before native iPhone, for mixed Android/iPhone groups. |
+| 1 Oct | Local data encryption deferred until app lock; Android's own per-file encryption covers wipes on Android 10+. |
 | 1 Oct | Discover tab: maintainer suggestions, recent posts, search. Posts opt in with #freegram (on by default). |
 
 ## Next up
