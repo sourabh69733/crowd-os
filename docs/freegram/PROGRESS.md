@@ -97,7 +97,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] You back up the release key and its password
 - [ ] APK on your website
 - [x] Play launch prep (7 October): target Android 16, AAB build, terms in app, Delete my account, default maintainer hook, privacy policy, listing, data safety ([play/README.md](play/README.md))
-- [ ] Your ID as default maintainer; support email in the Play docs
+- [ ] Your ID as default maintainer
 - [ ] Play: upload own signing key, closed test with 12+ testers for 14 days, apply for production
 
 ### Safety for protests 🟡

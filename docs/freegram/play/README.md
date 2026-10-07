@@ -7,7 +7,7 @@ Everything needed for the Play launch. Files here:
 - [STORE_LISTING.md](STORE_LISTING.md): name, descriptions, category, graphics list
 - [DATA_SAFETY.md](DATA_SAFETY.md): answers for Data safety, content rating, target audience, foreground service and permissions
 
-Before publishing, replace every `CONTACT_EMAIL` with the support email you'll use.
+Support email: sourabhsahu69733@gmail.com.
 
 ## Already done in the app (version 0.4.0)
 
@@ -68,4 +68,4 @@ Raise the version, build the AAB, upload to the production track with release no
 
 - **Foreground service video:** see DATA_SAFETY.md.
 - **User-generated content:** point to Report (post menu), Block, maintainers, and the terms during setup.
-- **Contact for abuse reports:** CONTACT_EMAIL, answered within a few days.
+- **Contact for abuse reports:** sourabhsahu69733@gmail.com, answered within a few days.

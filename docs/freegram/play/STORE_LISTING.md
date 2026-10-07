@@ -48,13 +48,13 @@ Freegram uses Nostr, an open network. Your posts can also be read in other Nostr
 
 Important: everything on Freegram is public. It is not a private messenger.
 
-Freegram is an early version. We'd love your feedback: CONTACT_EMAIL
+Freegram is an early version. We'd love your feedback: sourabhsahu69733@gmail.com
 
 ## Category and tags
 
 - Category: **Social** (not News; News apps have extra requirements)
 - Tags: social, community, offline, local news
-- Contact email: CONTACT_EMAIL
+- Contact email: sourabhsahu69733@gmail.com
 - Website: your website, or https://github.com/sourabh69733/crowd-os
 - Privacy policy URL: https://github.com/sourabh69733/crowd-os/blob/main/docs/freegram/play/PRIVACY.md (works once this branch is merged to `main`)
 

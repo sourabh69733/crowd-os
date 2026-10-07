@@ -1,6 +1,6 @@
 # Freegram privacy policy
 
-Last updated: 7 October 2026. Contact: CONTACT_EMAIL
+Last updated: 7 October 2026. Contact: sourabhsahu69733@gmail.com
 
 Freegram is a public notice board app. Posts are shared between phones nearby and through public Nostr servers. This policy explains what the app handles and who can see it. There is no Freegram company server.
 

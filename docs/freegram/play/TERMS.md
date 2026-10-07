@@ -1,6 +1,6 @@
 # Freegram terms of use
 
-Version 1, 7 October 2026. Contact: CONTACT_EMAIL
+Version 1, 7 October 2026. Contact: sourabhsahu69733@gmail.com
 
 The app shows a short version of these terms during setup (users tap "I understand and agree") and in Settings → Rules and terms. Keep the in-app text (`shared/.../ui/Rules.kt`) in step with this page and with [PRINCIPLES.md](../PRINCIPLES.md).
 
