@@ -21,7 +21,7 @@ android {
     defaultConfig {
         applicationId = "org.freegram.app"
         minSdk = 26
-        targetSdk = 35
+        targetSdk = 36
         versionCode = 4
         versionName = "0.4.0"
     }

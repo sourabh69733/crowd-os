@@ -110,6 +110,10 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     fun mySuggestList(): String? = prefs.getString("my_suggest_list", null)
     fun setMySuggestList(wire: String) { check(prefs.edit().putString("my_suggest_list", wire).commit()) }
 
+    /** Whether the built-in default maintainer was added once; after that the user's choice stands. */
+    fun defaultMaintainerApplied(): Boolean = prefs.getBoolean("default_maintainer_applied", false)
+    fun setDefaultMaintainerApplied() { check(prefs.edit().putBoolean("default_maintainer_applied", true).commit()) }
+
     fun onboarded(): Boolean = prefs.getBoolean("onboarded", false)
     fun setOnboarded() { check(prefs.edit().putBoolean("onboarded", true).commit()) }
 
@@ -210,6 +214,7 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     suspend fun likes(): Map<String, Set<String>> = dao.allLikes().groupBy({ it.postId }, { it.pubkey }).mapValues { it.value.toSet() }
     suspend fun likeBy(postId: String, pubkey: String): LikeRow? = dao.likeBy(postId, pubkey)
     suspend fun unsentLikes(): List<LikeRow> = dao.unsentLikes()
+    suspend fun myLikeIds(): List<String> = dao.myLikeIds()
     suspend fun markLikeSent(id: String) = dao.markLikeSent(id)
     suspend fun deleteLike(id: String) = dao.deleteLike(id)
 

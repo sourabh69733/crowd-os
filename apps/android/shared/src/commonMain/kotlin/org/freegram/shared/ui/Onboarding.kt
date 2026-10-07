@@ -57,7 +57,11 @@ fun OnboardingFlow(ui: FreegramUi, platform: PlatformActions) {
             step == 1 -> Intro(
                 big = "Everything you post is public",
                 body = "Anyone who receives a post can copy it anywhere, including the internet. There are no private posts. Don't post anything you'd regret others seeing.",
-                cta = "I understand", onNext = { step = 2 }, warning = true,
+                cta = "I understand and agree", onNext = { step = 2 }, warning = true,
+                extra = {
+                    RulesSummary()
+                    TermsList()
+                },
             )
             step == 2 -> NameStep(ui, onNext = { step = 3 }, onRestore = { restoring = true })
             else -> BackupStep(ui, platform)
@@ -76,7 +80,7 @@ private fun Dots(step: Int) {
 }
 
 @Composable
-private fun Intro(big: String, body: String, cta: String, onNext: () -> Unit, warning: Boolean = false) {
+private fun Intro(big: String, body: String, cta: String, onNext: () -> Unit, warning: Boolean = false, extra: (@Composable () -> Unit)? = null) {
     val c = Fg.colors
     Spacer(Modifier.height(40.dp))
     Box(Modifier.size(96.dp).clip(RoundedCornerShape(28.dp)).background(if (warning) c.amberSoft else c.tealSoft), contentAlignment = Alignment.Center) {
@@ -84,6 +88,7 @@ private fun Intro(big: String, body: String, cta: String, onNext: () -> Unit, wa
     }
     Text(big, fontSize = 32.sp, lineHeight = 34.sp, fontWeight = FontWeight.ExtraBold, color = c.ink)
     Text(body, fontSize = 16.sp, color = c.ink2)
+    extra?.invoke()
     Spacer(Modifier.height(24.dp))
     FgButton(cta, onNext)
 }

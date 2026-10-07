@@ -50,7 +50,7 @@ import org.freegram.shared.model.SettingsPage
 
 enum class SettingsDest(val title: String) {
     Backup("Backup and key"), People("People you follow"), Maintainers("Maintainers"), Servers("Servers"), Storage("Storage"),
-    Wipe("Panic wipe"),
+    Wipe("Panic wipe"), Rules("Rules and terms"), DeleteAccount("Delete my account"),
 }
 
 private const val MIN_PASSWORD = 10
@@ -79,7 +79,11 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
         }
         ToggleRow("Show my posts in Discover", "New posts get a #freegram tag so people can find them. They're public either way.",
             ui.discover.showMyPosts, ui::setShowInDiscover)
-        ListBox { ListRow("Panic wipe", "Erase Freegram from this phone in seconds") { dest = SettingsDest.Wipe } }
+        ListBox {
+            ListRow("Panic wipe", "Erase Freegram from this phone in seconds") { dest = SettingsDest.Wipe }
+            ListRow("Delete my account", "Ask servers to remove your posts, then erase this phone") { dest = SettingsDest.DeleteAccount }
+        }
+        ListBox { ListRow("Rules and terms", "What's allowed on Freegram") { dest = SettingsDest.Rules } }
         if (extraPages.isNotEmpty()) ListBox { extraPages.forEach { p -> ListRow(p.title, p.subtitle) { extra = p } } }
         Hint("Freegram prototype · not for safety-critical use yet.")
     }
@@ -110,6 +114,8 @@ fun SettingsDestination(ui: FreegramUi, platform: PlatformActions, dest: Setting
             SettingsDest.Servers -> ServersPage(ui)
             SettingsDest.Storage -> StoragePage(ui)
             SettingsDest.Wipe -> WipePage(ui)
+            SettingsDest.Rules -> { RulesSummary(); TermsList() }
+            SettingsDest.DeleteAccount -> DeleteAccountPage(ui)
         }
     }
 }
@@ -414,4 +420,23 @@ private fun HoldToConfirm(text: String, onConfirm: () -> Unit) {
         Box(Modifier.fillMaxHeight().fillMaxWidth(progress).align(Alignment.CenterStart).background(c.red.copy(alpha = 0.35f)))
         Text(if (progress > 0f) "Keep holding…" else text, color = c.red, fontWeight = FontWeight.Bold)
     }
+}
+
+// ---------- Delete account ----------
+
+@Composable
+private fun DeleteAccountPage(ui: FreegramUi) {
+    val c = Fg.colors
+    Card {
+        Text("Deletes your Freegram account", fontWeight = FontWeight.SemiBold, color = c.red)
+        Text("Freegram has no account on a company server. Your account is the ID on this phone. Deleting it:", fontSize = 13.sp, color = c.ink2)
+        Text("1. Asks the servers to delete your posts, replies and likes, and clears your name.\n" +
+            "2. Erases your ID and everything else from this phone, like panic wipe.", fontSize = 13.sp, color = c.ink2)
+    }
+    Section("What it can't promise", "Servers decide whether to honour deletion requests; most do. Copies already on other phones " +
+        "or saved by others can't be recalled. Without internet, only step 2 happens.")
+    Hint(if (ui.online) "You're online, so the deletion requests will be sent first." else "You're offline: only this phone will be erased.")
+    Spacer(Modifier.height(8.dp))
+    HoldToConfirm("Hold to delete my account", onConfirm = ui::deleteAccount)
+    Hint("Press and hold for 2 seconds. This can't be undone, even with a backup of your ID: your posts are gone from servers that honour it.")
 }

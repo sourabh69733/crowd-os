@@ -12,6 +12,7 @@ import org.freegram.app.moderation.HideList
 import org.freegram.app.moderation.SuggestList
 import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.protocol.BulletinEvent
+import org.freegram.app.protocol.AccountDeletion
 import org.freegram.app.protocol.Likes
 import org.freegram.app.protocol.Replies
 import org.json.JSONObject
@@ -197,7 +198,7 @@ class RelayClient(private val client: OkHttpClient = OkHttpClient.Builder().conn
                 (HideList.of(event) != null && Nip01Protocol.verifySigned(event, HideList.MAX_BYTES)) ||
                 (event.kind == PrivateMessages.WRAP_KIND && Nip01Protocol.verifySigned(event, PrivateMessages.MAX_WRAP_BYTES)) ||
                 (SuggestList.of(event) != null && Nip01Protocol.verifySigned(event, SuggestList.MAX_BYTES)) ||
-                Likes.likedPost(event) != null || Likes.isUnlike(event) ||
+                Likes.likedPost(event) != null || Likes.isUnlike(event) || AccountDeletion.isRequest(event) ||
                 ProfileEvent.nameOf(event) != null
         )
         return withTimeoutOrNull(12_000) {

@@ -96,6 +96,9 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] App icon
 - [ ] You back up the release key and its password
 - [ ] APK on your website
+- [x] Play launch prep (7 October): target Android 16, AAB build, terms in app, Delete my account, default maintainer hook, privacy policy, listing, data safety ([play/README.md](play/README.md))
+- [ ] Your ID as default maintainer; support email in the Play docs
+- [ ] Play: upload own signing key, closed test with 12+ testers for 14 days, apply for production
 
 ### Safety for protests 🟡
 - [x] Panic wipe: hold 2 seconds in Settings; erases ID, posts, photos and lists (checked on the emulator)
@@ -129,6 +132,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 29 Sep | Android only for now; code structured for iPhone later (Kotlin Multiplatform `shared` module). |
 | 29 Sep | Release key kept on your Mac, password in Keychain (option A). |
 | 30 Sep | Panic wipe: yes. App lock: optional only, off by default. |
+| 7 Oct | Google Play first (account bought); Apple later, when the iPhone app is ready. A web app may come before native iPhone, for mixed Android/iPhone groups. |
 | 1 Oct | Local data encryption deferred until app lock; Android's own per-file encryption covers wipes on Android 10+. |
 | 1 Oct | Discover tab: maintainer suggestions, recent posts, search. Posts opt in with #freegram (on by default). |
 

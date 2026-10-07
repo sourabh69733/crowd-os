@@ -104,6 +104,7 @@ interface BulletinDao {
     @Query("SELECT postId, pubkey FROM likes") suspend fun allLikes(): List<PostLikes>
     @Query("SELECT * FROM likes WHERE postId = :postId AND pubkey = :pubkey LIMIT 1") suspend fun likeBy(postId: String, pubkey: String): LikeRow?
     @Query("SELECT * FROM likes WHERE mine = 1 AND sent = 0") suspend fun unsentLikes(): List<LikeRow>
+    @Query("SELECT id FROM likes WHERE mine = 1") suspend fun myLikeIds(): List<String>
     @Query("UPDATE likes SET sent = 1 WHERE id = :id") suspend fun markLikeSent(id: String)
     @Query("DELETE FROM likes WHERE id = :id") suspend fun deleteLike(id: String)
     @Query("DELETE FROM likes WHERE mine = 0 AND id NOT IN (SELECT id FROM likes ORDER BY createdAt DESC LIMIT :keep)") suspend fun pruneLikes(keep: Int)

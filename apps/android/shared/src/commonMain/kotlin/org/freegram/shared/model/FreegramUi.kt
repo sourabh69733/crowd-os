@@ -116,6 +116,8 @@ interface SettingsUi {
     fun replaceKeyNow()
     /** Erases this phone's ID, posts, photos and lists, then closes the app. Cannot be undone without a backup. */
     fun panicWipe()
+    /** Asks servers to delete this ID's posts, likes and name (NIP-09), then erases the phone as [panicWipe] does. */
+    fun deleteAccount()
 }
 
 /** A page reached from Settings. Its content comes from the platform app. */

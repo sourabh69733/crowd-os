@@ -33,6 +33,8 @@ import org.freegram.app.moderation.PrivateMessages
 import org.freegram.app.store.Maintainer
 import org.freegram.app.media.MediaStore
 import org.freegram.app.media.PhotoEncoder
+import kotlinx.coroutines.withTimeoutOrNull
+import org.freegram.app.protocol.AccountDeletion
 import org.freegram.app.protocol.Likes
 import org.freegram.app.protocol.PhotoRef
 import org.freegram.app.protocol.Replies
@@ -226,6 +228,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
                 refreshLists()
                 saved.firstOrNull()?.let { show(it) }
                 refreshIdentity()
+                applyDefaultMaintainer()
                 val retryable = io { store.retryableDeliveries(nowSeconds() - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty() }
                 if (retryable) RelayRetryWorker.schedule(getApplication())
                 ready = true
@@ -796,6 +799,34 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private fun mySuggestList(): SuggestList? = store.mySuggestList()
         ?.let { wire -> runCatching { SuggestList.of(Nip01Protocol.fromJson(wire, SuggestList.MAX_BYTES)) }.getOrNull() }
 
+    /** Adds [FreegramConfig.DEFAULT_MAINTAINER_NPUB] once per install, unless it is this phone's own ID. */
+    private suspend fun applyDefaultMaintainer() {
+        val npub = FreegramConfig.DEFAULT_MAINTAINER_NPUB.takeIf { it.isNotEmpty() } ?: return
+        if (store.defaultMaintainerApplied()) return
+        val key = parseKey(npub)
+        io {
+            if (key != pubkeyHex) store.setMaintainer(key, true)
+            store.setDefaultMaintainerApplied()
+        }
+        refreshLists()
+    }
+
+    override fun deleteAccount() {
+        viewModelScope.launch {
+            busy = true
+            // Best effort: whatever the servers accept within the time limit, then the phone is erased regardless.
+            if (online) runCatching {
+                withTimeoutOrNull(DELETE_ACCOUNT_TIMEOUT_MS) {
+                    val me = pubkeyHex
+                    val ids = io { store.savedEvents().filter { it.pubkey == me }.map { it.id } + store.myLikeIds() }
+                    val requests = io { identity.withSecret { AccountDeletion.requests(it, ids, nowSeconds()) } }
+                    for (request in requests) publishEverywhere(request)
+                }
+            }
+            panicWipe()
+        }
+    }
+
     override fun panicWipe() {
         // Stop radio first so nothing is being written while data is cleared.
         runCatching { NearbyService.stop(getApplication()) }
@@ -920,6 +951,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         private const val DISCOVER_LIMIT = 50
         private const val MAX_SUGGESTED = 30
         private const val MAX_FETCHED_REPLIES = 500
+        private const val DELETE_ACCOUNT_TIMEOUT_MS = 30_000L
         val REPORT_REASONS = listOf("Spam", "Harassment or abuse", "False or dangerous information", "Illegal content", "Other")
     }
 
