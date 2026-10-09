@@ -1,5 +1,5 @@
 {
-  "name": "freegram-site",
+  "name": "freegram",
   "private": true,
   "scripts": {
     "build": "echo static site, nothing to build",
