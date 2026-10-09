@@ -22,7 +22,7 @@ Not collected: location, contacts, phone number, email, financial info, health, 
 **Can users request that their data be deleted?** Yes: Settings → Delete my account.
 
 **Data deletion URL** (Play asks for a web link too): use the "Deleting your data" section of the privacy policy:
-https://github.com/sourabh69733/crowd-os/blob/main/docs/freegram/play/PRIVACY.md#deleting-your-data
+https://freegram.in/privacy#deleting-your-data
 
 ## Other declarations
 

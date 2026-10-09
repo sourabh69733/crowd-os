@@ -68,7 +68,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 ### Moderation 🟡
 - [x] Maintainer hide lists (signed, public, can be switched off)
 - [x] Private reports and appeals (NIP-17, Quartz NIP-44), maintainer inbox
-- [ ] You set up as the default maintainer for new users
+- [x] You set up as the default maintainer for new users (0.4.1)
 - [ ] Hide lists shared nearby
 - [ ] Maintainer inbox servers (NIP-17 kind 10050)
 
@@ -97,8 +97,9 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] You back up the release key and its password
 - [ ] APK on your website
 - [x] Play launch prep (7 October): target Android 16, AAB build, terms in app, Delete my account, default maintainer hook, privacy policy, listing, data safety ([play/README.md](play/README.md))
-- [ ] Your ID as default maintainer
-- [ ] Play: upload own signing key, closed test with 12+ testers for 14 days, apply for production
+- [x] Default maintainer set to your ID (0.4.1)
+- [x] Play: own signing key uploaded (8 October)
+- [ ] Play: closed test with 12+ testers for 14 days, apply for production
 
 ### Safety for protests 🟡
 - [x] Panic wipe: hold 2 seconds in Settings; erases ID, posts, photos and lists (checked on the emulator)
