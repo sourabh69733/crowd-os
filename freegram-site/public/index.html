@@ -3,9 +3,9 @@
 <head>
 <meta charset="utf-8">
 <meta name="viewport" content="width=device-width, initial-scale=1">
-<title>Freegram · Coming soon</title>
-<meta name="description" content="Freegram: speak freely, even when the internet doesn't. Posts hop phone to phone when networks fail, then reach the world when any phone gets online. Coming soon.">
-<meta property="og:title" content="Freegram · Coming soon">
+<title>Freegram · Speak freely, even offline</title>
+<meta name="description" content="Freegram: speak freely, even when the internet doesn't. Posts hop phone to phone when networks fail, then reach the world when any phone gets online. Free Android app.">
+<meta property="og:title" content="Freegram · Speak freely, even offline">
 <meta property="og:description" content="Speak freely. Even when the internet doesn't.">
 <meta property="og:url" content="https://freegram.in">
 <meta name="theme-color" content="#07100f">
@@ -125,6 +125,15 @@ h2{font-size:clamp(1.9rem,5vw,3rem);letter-spacing:-.03em;line-height:1.08;max-w
 .email{font-family:"JetBrains Mono",monospace;font-size:clamp(.85rem,2.6vw,1rem);color:var(--muted);margin-top:18px;word-break:break-all}
 .copied{color:var(--accent);font-size:.85rem;height:1.2em;margin-top:6px}
 
+.dl{display:grid;grid-template-columns:repeat(auto-fit,minmax(280px,1fr));gap:16px;margin-top:44px}
+.dl .card ol{margin:10px 0 0 18px;color:var(--muted);font-size:.96rem}
+.dl .card li{margin:6px 0}
+.meta{font-size:.82rem;color:var(--muted);margin-top:14px;word-break:break-all}
+.meta b{color:var(--text);font-weight:500}
+.warn{border-color:color-mix(in srgb,#f0b43c 45%,var(--line))}
+.warn .icon{background:color-mix(in srgb,#f0b43c 16%,transparent);color:#f0b43c}
+footer a{color:var(--muted);text-decoration:none;margin-left:14px}
+footer a:hover{color:var(--accent)}
 footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;border-top:1px solid var(--line);margin-top:40px}
 
 /* reveal */
@@ -150,17 +159,17 @@ footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;just
       <svg viewBox="0 0 32 32" aria-hidden="true"><rect width="32" height="32" rx="8" fill="var(--bg2)" stroke="var(--line)"/><path d="M9 22 23 10M23 10l-1 13" stroke="var(--accent)" stroke-width="1.6"/><circle cx="9" cy="22" r="3" fill="var(--accent)"/><circle cx="23" cy="10" r="3" fill="var(--accent)"/><circle cx="22" cy="23" r="2.4" fill="var(--accent)" opacity=".6"/></svg>
       Freegram
     </div>
-    <a class="nav-cta" href="#contact">Get in touch</a>
+    <a class="nav-cta" href="#download">Download</a>
   </nav>
 
   <header class="hero">
-    <span class="badge"><span class="pulse"></span>Coming soon</span>
+    <span class="badge"><span class="pulse"></span>Early access · Android</span>
     <h1>Speak <span class="grad">freely.</span></h1>
     <p class="tag">Even when the internet doesn't. <span>A social app that keeps working when networks fail.</span></p>
     <p class="sub">Freegram lets posts travel phone to phone when the signal is gone, then carries them to the world the moment any phone gets back online. Unchanged. Signed by you.</p>
     <div class="typed mono" aria-live="polite"><span id="typed"></span><span class="caret"></span></div>
     <div class="hero-actions">
-      <a class="btn btn-primary" href="#contact">Join early testing →</a>
+      <a class="btn btn-primary" href="#download">Download for Android →</a>
       <a class="btn btn-ghost" href="#how">See how it works</a>
     </div>
   </header>
@@ -220,6 +229,57 @@ footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;just
     </div>
   </section>
 
+
+  <section id="features" class="reveal">
+    <div class="eyebrow mono">// what you can do</div>
+    <h2>Everything a public board needs. Nothing it doesn't.</h2>
+    <div class="cards">
+      <div class="card"><h3>Post, reply, like</h3><p>Share updates with an optional photo, answer posts, and react. Replies travel nearby too.</p></div>
+      <div class="card"><h3>Discover people</h3><p>See recent posts from everyone on Freegram, search by name or ID, and follow by scanning a QR code, even offline.</p></div>
+      <div class="card"><h3>No phone number</h3><p>Your ID is made on your phone. No email, no number, nobody added to random groups. Back it up with a password.</p></div>
+      <div class="card"><h3>You choose who moderates</h3><p>Report posts privately. Maintainers can hide posts for those who follow them, publicly. Switch any maintainer off.</p></div>
+      <div class="card"><h3>Panic wipe</h3><p>Hold one button for two seconds and everything on the phone is erased: your ID, posts, photos and who you follow.</p></div>
+      <div class="card"><h3>No ads, no tracking</h3><p>No analytics and nothing sent to us. Photos have their location removed before posting.</p></div>
+    </div>
+  </section>
+
+  <section id="download" class="reveal">
+    <div class="eyebrow mono">// get the app</div>
+    <h2>Download Freegram for Android.</h2>
+    <p class="lead">Free. Early version for testers. Google Play is coming; until then, install it directly from here.</p>
+    <div class="hero-actions">
+      <a class="btn btn-primary" href="/freegram-0.4.1.apk" download>⬇ Download APK · v0.4.1 · 6.8 MB</a>
+    </div>
+    <div class="dl">
+      <div class="card">
+        <h3>How to install</h3>
+        <ol>
+          <li>Tap <b>Download APK</b> on your Android phone.</li>
+          <li>Open the downloaded file. If Android asks, allow <b>Install unknown apps</b> for your browser.</li>
+          <li>Tap <b>Install</b>, open Freegram, and follow the short setup.</li>
+          <li>Make the encrypted backup it offers, so you never lose your ID.</li>
+        </ol>
+      </div>
+      <div class="card">
+        <h3>Requirements</h3>
+        <ol>
+          <li>Android 8 or newer.</li>
+          <li>Nearby sharing needs Google Play services, Bluetooth and Wi-Fi.</li>
+          <li>Internet is optional: posts wait and go out when any phone carrying them is back online.</li>
+        </ol>
+        <p class="meta">Check it's genuine. File SHA-256:<br><b class="mono">cd640acb7d023b17d5daa0fb42489923ad79abd8d75743270064dc5848d40805</b></p>
+        <p class="meta">Signing certificate SHA-256:<br><b class="mono">ca49496dfecec83fc29bd797f7dc65abade8df2fe08d2ba37c2cd5d7c18d03d1</b></p>
+      </div>
+      <div class="card warn">
+        <h3>Know before you post</h3>
+        <ol>
+          <li><b>Everything is public.</b> Anyone who gets a post can copy it anywhere. It's not a private messenger.</li>
+          <li><b>Not anonymous.</b> Your ID can be linked to you by what you post, and servers see your internet address.</li>
+          <li><b>Early version.</b> Don't rely on it alone in an emergency.</li>
+        </ol>
+      </div>
+    </div>
+  </section>
   <section id="roadmap" class="reveal">
     <div class="eyebrow mono">// progress</div>
     <h2>Being built, in the open.</h2>
@@ -227,8 +287,10 @@ footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;just
       <div class="ms done"><div class="dot"></div><div><h4>Signed posts &amp; internet feed <span class="pill">done</span></h4><p>Your own key, your own posts, published to open relays.</p></div></div>
       <div class="ms done"><div class="dot"></div><div><h4>Phone-to-phone sharing <span class="pill">done</span></h4><p>Posts and photos move between nearby phones with no internet.</p></div></div>
       <div class="ms done"><div class="dot"></div><div><h4>Offline to online bridge <span class="pill">done</span></h4><p>Posts received nearby go online by themselves when a connection appears.</p></div></div>
-      <div class="ms now"><div class="dot"></div><div><h4>Field testing on real phones <span class="pill">in progress</span></h4><p>Safety, moderation and reliability checks on real devices.</p></div></div>
-      <div class="ms"><div class="dot"></div><div><h4>Public beta on Android <span class="pill">soon</span></h4><p>Open to early testers first. Want in? Say hi below.</p></div></div>
+      <div class="ms done"><div class="dot"></div><div><h4>Replies, likes, Discover and safety tools <span class="pill">done</span></h4><p>Find people, answer posts, private reports, maintainers and panic wipe.</p></div></div>
+      <div class="ms now"><div class="dot"></div><div><h4>Early access on Android <span class="pill">now</span></h4><p>Download above and tell us what breaks.</p></div></div>
+      <div class="ms"><div class="dot"></div><div><h4>Google Play <span class="pill">testing</span></h4><p>In Google's closed testing; public release after that.</p></div></div>
+      <div class="ms"><div class="dot"></div><div><h4>Web app and iPhone <span class="pill">later</span></h4><p>So mixed Android and iPhone groups can stay together.</p></div></div>
     </div>
   </section>
 
@@ -245,7 +307,7 @@ footer{padding:40px 0 50px;color:var(--muted);font-size:.85rem;display:flex;just
 
   <footer>
     <span>© <span id="yr">2026</span> Freegram · freegram.in</span>
-    <span class="mono">made for when the signal drops</span>
+    <span><a href="/privacy">Privacy</a><a href="/terms">Terms</a><a href="https://github.com/sourabh69733/crowd-os">Source</a></span>
   </footer>
 </div>
 
