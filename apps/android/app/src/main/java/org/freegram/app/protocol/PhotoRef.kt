@@ -1,12 +1,12 @@
 package org.freegram.app.protocol
 
 /**
- * A photo attached to a post by content hash, as a NIP-92 `imeta` tag without a URL:
+ * A photo attached to a post by content hash, with an optional HTTPS URL in its NIP-92 tag:
  * `["imeta", "x <sha256>", "m image/jpeg", "size <bytes>", "dim <w>x<h>"]`.
  * Any source (nearby phone, later a Blossom server) can supply the bytes; the hash proves they match.
  */
-data class PhotoRef(val sha256: String, val size: Int, val width: Int, val height: Int) {
-    fun toTag(): Array<String> = arrayOf("imeta", "x $sha256", "m $MIME", "size $size", "dim ${width}x$height")
+data class PhotoRef(val sha256: String, val size: Int, val width: Int, val height: Int, val url: String? = null) {
+    fun toTag(): Array<String> = (listOf("imeta", "x $sha256", "m $MIME", "size $size", "dim ${width}x$height") + listOfNotNull(url?.let { "url $it" })).toTypedArray()
 
     companion object {
         const val MIME = "image/jpeg"
@@ -25,7 +25,9 @@ data class PhotoRef(val sha256: String, val size: Int, val width: Int, val heigh
             val size = fields["size"]?.toIntOrNull()?.takeIf { it in 1..MAX_BYTES } ?: return null
             val dim = fields["dim"]?.split('x')?.mapNotNull { it.toIntOrNull() }?.takeIf { it.size == 2 } ?: return null
             if (dim.any { it !in 1..MAX_DIMENSION }) return null
-            return PhotoRef(sha, size, dim[0], dim[1])
+            val url = fields["url"]
+            if (url != null && runCatching { java.net.URI(url).let { it.scheme == "https" && it.host != null && it.userInfo == null && it.fragment == null } }.getOrDefault(false).not()) return null
+            return PhotoRef(sha, size, dim[0], dim[1], url)
         }
     }
 }
