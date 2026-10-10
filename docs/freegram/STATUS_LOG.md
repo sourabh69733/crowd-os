@@ -1,6 +1,6 @@
 # Freegram status log
 
-Detailed history of what was built and how each part was tested. For the one-page summary, see [PROGRESS.md](PROGRESS.md). Last updated 29 September 2026. This is a developer prototype, not a field pilot or a release candidate.
+Detailed history of what was built and how each part was tested. For the one-page summary, see [PROGRESS.md](PROGRESS.md). Last updated 10 October 2026. This is a developer prototype, not a field pilot or a release candidate.
 
 ## Implemented and verified
 
@@ -62,3 +62,5 @@ Only two physical phones are available; follow [the two-phone test plan](TWO_PHO
 3. ~~Add key export/recovery and a loss/compromise path.~~ Done (plain `nsec` backup, restore, replace). Encrypted backup added 27 September: a NIP-49 `ncryptsec` (Quartz, scrypt 2^16, password of at least 10 characters) that can be copied (marked sensitive on the clipboard) and restored with its password; a wrong password or damaged backup keeps the current key. Tests pass the official NIP-49 example. Creating one took about 5 s on the emulator. Still open: restore between two physical phones.
 4. Repeat the manual followed-author feed test on a second physical phone, measure intermittent relay failures, and add broader abuse controls before a public pilot.
 5. Run repeated offline A → B → C trials with the Share nearby mode on at least three physical phones (the adapter is built but untested between devices). Record discovery time, payload ordering, delivery, battery and screen state.
+
+- Reach farther (10 October 2026, release 0.5.0, version code 6): Settings → Nearby now offers Short (6), Medium (12, default) and Far (20) hop limits, applied independently by each phone on offer and acceptance with protocol v1 unchanged. Verified top-level Discover posts are saved with hops 0 and no new relay deliveries, excluding hidden, muted and blocked posts; existing 100-post and 20-per-author limits and unsent-post protection apply. Nearby can run for 2 hours (default), 6 hours or until stopped; notification and screen show the duration and battery note. Run-length changes apply on the next start. Added 5 unit tests for settings persistence, hop boundaries on offer and accept, different phone settings, Discover transfer and filtering, capacity and unsent protection. `cd apps/android && ./gradlew testDebugUnitTest assembleRelease` passed: 98 tests, no failures; release APK built. Code review found no actionable issues. Real-phone reach, duration and battery checks remain open.

@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.4.1**.
+One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.5.0**.
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -52,11 +52,14 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 
 ### 3. Nearby sharing 🟡
 - [x] Exchange protocol with limits ([protocol/README.md](../../protocol/README.md))
-- [x] Nearby Connections adapter, runs in the background with a notification (up to 2 hours)
+- [x] Nearby Connections adapter, runs in the background with a notification (2 hours, 6 hours or until stopped)
 - [x] First real 2-phone test: posts shared across phones (28 September)
 - [ ] Repeated trials: distance, walls, screen off, battery ([TWO_PHONE_TEST.md](TWO_PHONE_TEST.md) test 3)
 - [ ] Two hops with 2 phones (test 4)
-- [ ] Hop setting, longer run time, carry Discover posts ([plan, feature 5](OFFLINE_MEDIA_PLAN.md#5-reach-farther-without-internet))
+- [x] Hop setting: Short (6), Medium (12, default), Far (20)
+- [x] Carry verified Discover posts nearby, within existing storage limits; server-fetched replies stay in memory
+- [x] Nearby run length: 2 hours (default), 6 hours or until stopped, with a battery note
+- [ ] Check the new reach and run-length settings on real phones ([plan, feature 5](OFFLINE_MEDIA_PLAN.md#5-reach-farther-without-internet))
 - [ ] Names, hide lists and likes over Nearby
 - [ ] Phones without Google Play services (own Bluetooth layer)
 
@@ -153,13 +156,14 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 8 Oct | Play signs with your own key (not Google-generated), so the website APK keeps working if Play drops the app. |
 | 8 Oct | Target audience 18+. Support email sourabhsahu69733@gmail.com. |
 | 9 Oct | APK distributed from freegram.in now, alongside the Play closed test. All work on `main`. |
+| 10 Oct 2026 | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
 
 ## Next up
 
 1. **You:** screenshots, finish the Play forms, upload 0.4.1 to closed testing, invite 15 to 20 testers.
 2. **You:** back up the release key; test 0.4.1 on your phones (replies, likes, terms, Back gesture).
-3. **Me:** reach farther without internet: hop setting, carry Discover posts, longer Nearby ([plan](OFFLINE_MEDIA_PLAN.md#build-order)).
+3. **You:** test 0.5.0 reach settings, carried Discover posts and longer Nearby on your phones.
 4. **Me:** fast Wi-Fi mode for photos, then media servers (needs your R2 bucket), then videos.
 5. **You:** answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
