@@ -17,21 +17,28 @@ class RelayRetryWorker(context: Context, params: WorkerParameters) : CoroutineWo
     override suspend fun doWork(): Result {
         val store = RoomStore.shared(applicationContext)
         store.initialize()
-        val remaining = retryPendingDeliveries(store, RelayClient()::publish)
+        val photosRemaining = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            org.freegram.app.media.OnlinePhotos(applicationContext, store, org.freegram.app.media.MediaStore.shared(applicationContext), org.freegram.app.identity.ProtectedIdentity(applicationContext)).sync()
+        }
+        val remaining = retryPendingDeliveries(store, RelayClient()::publish) || photosRemaining
         // Stop after MAX_RUNS; states stay visible and the user can still retry manually.
         return if (remaining && runAttemptCount + 1 < MAX_RUNS) Result.retry() else Result.success()
     }
 
     companion object {
-        private const val MAX_RUNS = 10
+        private const val MAX_RUNS = 16
         private const val NAME = "relay-retry"
 
-        fun schedule(context: Context) {
+        fun schedule(context: Context) { schedule(context, ExistingWorkPolicy.APPEND_OR_REPLACE) }
+
+        fun schedulePhotos(context: Context) { schedule(context, ExistingWorkPolicy.KEEP) }
+
+        private fun schedule(context: Context, policy: ExistingWorkPolicy) {
             val request = OneTimeWorkRequestBuilder<RelayRetryWorker>()
                 .setConstraints(Constraints.Builder().setRequiredNetworkType(NetworkType.CONNECTED).build())
                 .setBackoffCriteria(BackoffPolicy.EXPONENTIAL, 30, TimeUnit.SECONDS)
                 .build()
-            WorkManager.getInstance(context).enqueueUniqueWork(NAME, ExistingWorkPolicy.APPEND_OR_REPLACE, request)
+            WorkManager.getInstance(context).enqueueUniqueWork(NAME, policy, request)
         }
     }
 }

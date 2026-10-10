@@ -151,7 +151,7 @@ class NearbySharing(
                         release(endpointId)
                     }
                 }
-                if (report.received > 0 && bridgeTo.isNotEmpty()) RelayRetryWorker.schedule(context)
+                if (report.photosReceived > 0 || (report.received > 0 && bridgeTo.isNotEmpty())) RelayRetryWorker.schedule(context)
                 withContext(Dispatchers.Main) { if (running) listener.onExchange(peer, report) }
             }
         }

@@ -281,7 +281,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val signed = io {
             if (photo != null) media.put(photo.ref.sha256, photo.bytes, referencedPhotos() + photo.ref.sha256)
             val tags = buildList {
-                if (photo != null) add(photo.ref.toTag())
+                if (photo != null) add(photo.ref.copy(url = org.freegram.app.media.BlossomClient.url(photo.ref.sha256)).toTag())
                 if (discoverOptIn) add(Discover.tag())
             }.toTypedArray()
             identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds(), tags) }.also {
@@ -1114,6 +1114,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         viewModelScope.launch {
             NearbyState.exchanges.collect { if (ready) { refreshLists(); devSelected?.let { show(it) } } }
         }
+        viewModelScope.launch {
+            org.freegram.app.media.PhotoChanges.updates.collect { if (ready) { refreshLists(); devSelected?.let { show(it) } } }
+        }
     }
 
     private suspend fun deliver(event: BulletinEvent) {
@@ -1165,6 +1168,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         myHideList = io { pubkeyHex.takeIf { it.isNotEmpty() }?.let { store.hideList(it) } }
         names = io { store.names() }
         photoBytes = io { media.totalBytes() }
+        if (saved.any { PhotoRef.of(it) != null }) RelayRetryWorker.schedulePhotos(getApplication())
         val hops = io { store.hopsById() }
         val deliveries = io { store.deliveryStates() }
         val followed = policies.filter { it.state == AuthorState.FOLLOWING }.map { it.pubkey }.toSet()
