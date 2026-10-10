@@ -277,4 +277,17 @@ class RoomStoreTest {
         assertEquals(20, store.authorPolicies().size)
         store.close()
     }
+    @Test fun nearbySettingsDefaultAndSurviveReopen() {
+        val store = RoomStore(context, databaseName)
+        assertEquals(12, store.nearbyReach().hops)
+        for (reach in org.freegram.shared.model.NearbyReach.entries) {
+            store.setNearbyReach(reach)
+            val reopened = RoomStore(context, databaseName)
+            assertEquals(reach, reopened.nearbyReach())
+            reopened.close()
+        }
+        store.close()
+    }
+
+
 }

@@ -62,6 +62,7 @@ import org.freegram.shared.model.PersonUi
 import org.freegram.shared.model.StorageUi
 import org.freegram.shared.model.NearbyActivity
 import org.freegram.shared.model.NearbyUi
+import org.freegram.shared.model.NearbyReach
 import org.freegram.shared.model.PhotoUi
 import org.freegram.shared.model.PostSource
 import org.freegram.shared.model.PostUi
@@ -116,6 +117,12 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyStatus by mutableStateOf(""); private set
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
     var autoBridge by mutableStateOf(store.autoBridge()); private set
+    override var nearbyReach by mutableStateOf(store.nearbyReach()); private set
+
+    override fun changeNearbyReach(reach: NearbyReach) {
+        store.setNearbyReach(reach)
+        nearbyReach = reach
+    }
 
     // Moderation
     var maintainers by mutableStateOf<List<Maintainer>>(emptyList()); private set

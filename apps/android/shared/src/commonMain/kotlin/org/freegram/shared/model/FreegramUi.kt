@@ -45,6 +45,10 @@ data class PostUi(
 
 data class NearbyActivity(val text: String, val time: String)
 
+enum class NearbyReach(val label: String, val hops: Int) {
+    Short("Short", 6), Medium("Medium", 12), Far("Far", 20),
+}
+
 data class NearbyUi(
     val running: Boolean,
     val status: String,
@@ -94,6 +98,8 @@ interface SettingsUi {
     val inboxList: List<InboxItemUi>
     val storageInfo: StorageUi
     val relayUrls: List<String>
+    val nearbyReach: NearbyReach
+    fun changeNearbyReach(reach: NearbyReach)
     /** The plain secret key while the user has chosen to show it; null otherwise. */
     val plainKey: String?
 

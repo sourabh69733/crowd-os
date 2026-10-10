@@ -47,9 +47,11 @@ import org.freegram.shared.model.FreegramUi
 import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
+import org.freegram.shared.model.NearbyReach
+import androidx.compose.material3.RadioButton
 
 enum class SettingsDest(val title: String) {
-    Backup("Backup and key"), People("People you follow"), Maintainers("Maintainers"), Servers("Servers"), Storage("Storage"),
+    Backup("Backup and key"), People("People you follow"), Maintainers("Maintainers"), Servers("Servers"), Storage("Storage"), Nearby("Nearby"),
     Wipe("Panic wipe"), Rules("Rules and terms"), DeleteAccount("Delete my account"),
 }
 
@@ -74,6 +76,7 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
             ListRow("Maintainers", "${ui.maintainerList.count { it.enabled }} active · ${s.hiddenByMaintainers} posts hidden") { dest = SettingsDest.Maintainers }
         }
         ListBox {
+            ListRow("Nearby", "${ui.nearbyReach.label} reach") { dest = SettingsDest.Nearby }
             ListRow("Servers", "${ui.relayUrls.size} servers") { dest = SettingsDest.Servers }
             ListRow("Storage", "${s.posts} of ${s.maxPosts} posts · ${mb(s.photoBytes)} of ${mb(s.maxPhotoBytes)} photos") { dest = SettingsDest.Storage }
         }
@@ -111,6 +114,7 @@ fun SettingsDestination(ui: FreegramUi, platform: PlatformActions, dest: Setting
             SettingsDest.Backup -> BackupPage(ui, platform)
             SettingsDest.People -> PeoplePage(ui)
             SettingsDest.Maintainers -> MaintainersPage(ui)
+            SettingsDest.Nearby -> NearbySettingsPage(ui)
             SettingsDest.Servers -> ServersPage(ui)
             SettingsDest.Storage -> StoragePage(ui)
             SettingsDest.Wipe -> WipePage(ui)
@@ -335,6 +339,20 @@ private fun MaintainersPage(ui: FreegramUi) {
                 }
             }
         }
+    }
+}
+
+@Composable
+private fun NearbySettingsPage(ui: FreegramUi) {
+    Card {
+        Text("How far posts travel", color = Fg.colors.ink, fontWeight = FontWeight.SemiBold)
+        NearbyReach.entries.forEach { reach ->
+            Row(Modifier.fillMaxWidth().clickable { ui.changeNearbyReach(reach) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = ui.nearbyReach == reach, onClick = { ui.changeNearbyReach(reach) })
+                Text("${reach.label} (${reach.hops})", color = Fg.colors.ink)
+            }
+        }
+        Hint("Each phone applies its own limit when passing on or receiving posts.")
     }
 }
 

@@ -20,7 +20,7 @@ interface PeerLink {
 
 /** Pilot limits from the Phase 0 contract. Hop and age limits bind this client only, not a malicious peer. */
 data class NearbyPolicy(
-    val maxHops: Int = 6,
+    val maxHops: Int = 12,
     val maxAgeSeconds: Long = 48L * 3600,
     val maxFutureSeconds: Long = 600,
     val frameTimeoutMs: Long = 15_000,
@@ -41,7 +41,7 @@ data class ExchangeReport(
  */
 class NearbyExchange(
     private val store: RoomStore,
-    private val policy: NearbyPolicy = NearbyPolicy(),
+    private val policy: NearbyPolicy = NearbyPolicy(maxHops = store.nearbyReach().hops),
     /** Relays to publish received posts to when online; empty disables the bridge. */
     private val bridgeTo: List<String> = emptyList(),
     /** Photo storage; null disables the photo round. */

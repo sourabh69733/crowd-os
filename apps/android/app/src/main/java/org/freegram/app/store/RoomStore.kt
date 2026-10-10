@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.shared.model.NearbyReach
 import org.freegram.app.moderation.HideList
 import org.freegram.app.relay.RetryPolicy
 import org.json.JSONArray
@@ -76,6 +77,9 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
     /** Whether posts received nearby are published to relays automatically when online. On by default. */
     fun autoBridge(): Boolean = prefs.getBoolean("auto_bridge", true)
     fun setAutoBridge(enabled: Boolean) { check(prefs.edit().putBoolean("auto_bridge", enabled).commit()) }
+
+    fun nearbyReach(): NearbyReach = NearbyReach.entries.firstOrNull { it.name == prefs.getString("nearby_reach", null) } ?: NearbyReach.Medium
+    fun setNearbyReach(reach: NearbyReach) { check(prefs.edit().putString("nearby_reach", reach.name).commit()) }
 
     suspend fun hasBulletin(eventId: String): Boolean = dao.hasBulletin(eventId)
 

@@ -35,7 +35,9 @@ class NearbyExchangeTest {
 
     private fun phone(): RoomStore = runBlocking {
         val name = "nearby-${UUID.randomUUID()}"
-        RoomStore(context, name).also { it.initialize(); stores += it to name }
+        RoomStore(object : android.content.ContextWrapper(context) {
+            override fun getSharedPreferences(prefName: String, mode: Int) = context.getSharedPreferences("$name:$prefName", mode)
+        }, name).also { it.initialize(); stores += it to name }
     }
 
     private fun post(key: Int, text: String, at: Long = now - 60): BulletinEvent =
@@ -161,7 +163,7 @@ class NearbyExchangeTest {
         val atLimit = post(3, "hop 6"); val stale = post(3, "stale", now - 49 * 3600); val future = post(3, "future", now + 3600)
         val blocked = post(9, "blocked author")
         runBlocking { us.setAuthorState(blocked.pubkey, AuthorState.BLOCKED) }
-        val report = againstScript(us) { toUs, fromUs ->
+        val report = againstScript(us, NearbyPolicy(maxHops = 6)) { toUs, fromUs ->
             handshake(toUs, fromUs, have = listOf(atLimit.id, stale.id, future.id, blocked.id))
             toUs.send(frame(NearbyFrame.Event(6, atLimit)))
             assertEquals(NearbyFrame.Nack(atLimit.id, "hop limit"), fromUs.frame())
@@ -187,7 +189,7 @@ class NearbyExchangeTest {
             val blocked = post(9, "blocked").also { us.saveReceivedEvent(it) }
             us.setAuthorState(blocked.pubkey, AuthorState.BLOCKED)
         }
-        val report = againstScript(us) { toUs, fromUs ->
+        val report = againstScript(us, NearbyPolicy(maxHops = 6)) { toUs, fromUs ->
             toUs.send(frame(NearbyFrame.Hello(1)))
             fromUs.frame()
             assertEquals(NearbyFrame.Have(listOf(fresh.id)), fromUs.frame())
@@ -255,4 +257,43 @@ class NearbyExchangeTest {
             NearbyFrame.Event(2, event), NearbyFrame.Ack(event.id), NearbyFrame.Nack(event.id, "store full"), NearbyFrame.Sent,
         ).forEach { assertEquals(it, NearbyFrames.parse(NearbyFrames.encode(it))) }
     }
+    @Test fun eachLocalHopSettingAppliesToOffersAndAcceptance() {
+        for (reach in org.freegram.shared.model.NearbyReach.entries) {
+            val us = phone()
+            us.setNearbyReach(reach)
+            val allowed = post(3, "allowed ${reach.hops}")
+            val exhausted = post(3, "exhausted ${reach.hops}")
+            val incoming = post(4, "incoming ${reach.hops}")
+            val rejected = post(4, "rejected ${reach.hops}")
+            runBlocking {
+                us.saveNearbyEvent(allowed, reach.hops - 1)
+                us.saveNearbyEvent(exhausted, reach.hops)
+            }
+            val toUs = Channel<String>(Channel.UNLIMITED)
+            val fromUs = Channel<String>(Channel.UNLIMITED)
+            val report = runBlocking {
+                coroutineScope {
+                    val ours = async { NearbyExchange(us, now = { now }).run(ChannelLink(toUs, fromUs)) }
+                    toUs.send(frame(NearbyFrame.Hello(1)))
+                    fromUs.frame()
+                    assertEquals(NearbyFrame.Have(listOf(allowed.id)), fromUs.frame())
+                    toUs.send(frame(NearbyFrame.Have(listOf(incoming.id, rejected.id))))
+                    fromUs.frame()
+                    toUs.send(frame(NearbyFrame.Want(emptyList())))
+                    assertEquals(NearbyFrame.Sent, fromUs.frame())
+                    toUs.send(frame(NearbyFrame.Event(reach.hops - 1, incoming)))
+                    assertEquals(NearbyFrame.Ack(incoming.id), fromUs.frame())
+                    toUs.send(frame(NearbyFrame.Event(reach.hops, rejected)))
+                    assertEquals(NearbyFrame.Nack(rejected.id, "hop limit"), fromUs.frame())
+                    toUs.send(frame(NearbyFrame.Sent))
+                    ours.await()
+                }
+            }
+            assertEquals(1, report.received)
+            assertEquals(1, report.rejected)
+            runBlocking { assertEquals(reach.hops, us.hopsById()[incoming.id]) }
+        }
+    }
+
+
 }
