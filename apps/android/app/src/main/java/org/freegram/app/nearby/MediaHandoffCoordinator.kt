@@ -2,7 +2,7 @@ package org.freegram.app.nearby
 
 /** One media window per phone. Old callbacks cannot resume a stopped or newer session. */
 class MediaHandoffCoordinator {
-    enum class Phase { Stopped, Cluster, Preparing, Connecting, Transferring }
+    enum class Phase { Stopped, Cluster, Preparing, Connecting, Transferring, Returning }
     data class Lease(val generation: Long, val endpoint: String, val serial: Long)
     @Volatile var phase = Phase.Stopped; private set
     private var generation = 0L
@@ -24,6 +24,11 @@ class MediaHandoffCoordinator {
     @Synchronized fun transferring(lease: Lease): Boolean {
         if (!current(lease) || phase != Phase.Connecting) return false
         phase = Phase.Transferring
+        return true
+    }
+    @Synchronized fun returning(lease: Lease): Boolean {
+        if (!current(lease)) return false
+        phase = Phase.Returning
         return true
     }
     @Synchronized fun resume(lease: Lease): Boolean {

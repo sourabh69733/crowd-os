@@ -3,6 +3,12 @@ package org.freegram.app.nearby
 import android.Manifest
 import android.content.Context
 import android.os.Build
+import java.io.IOException
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.CancellationException
+import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.withTimeout
+import org.freegram.app.media.sha256Hex
 import com.google.android.gms.common.ConnectionResult
 import com.google.android.gms.common.GoogleApiAvailability
 import com.google.android.gms.nearby.Nearby
@@ -14,9 +20,6 @@ import com.google.android.gms.nearby.connection.ConnectionsClient
 import com.google.android.gms.nearby.connection.DiscoveredEndpointInfo
 import com.google.android.gms.nearby.connection.DiscoveryOptions
 import com.google.android.gms.nearby.connection.EndpointDiscoveryCallback
-import com.google.android.gms.nearby.connection.Payload
-import com.google.android.gms.nearby.connection.PayloadCallback
-import com.google.android.gms.nearby.connection.PayloadTransferUpdate
 import com.google.android.gms.nearby.connection.Strategy
 import java.security.SecureRandom
 import java.util.concurrent.ConcurrentHashMap
@@ -24,7 +27,6 @@ import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
 import org.freegram.app.media.MediaStore
-import kotlinx.coroutines.channels.Channel
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withTimeoutOrNull
@@ -71,13 +73,22 @@ class NearbySharing(
     private val links = ConcurrentHashMap<String, NearbyPeerLink>()
     private val names = ConcurrentHashMap<String, String>()
     private var localName = ""
-    var running = false
+    private val handoffs = MediaHandoffCoordinator()
+    private var mediaLink: NearbyPeerLink? = null
+    private var mediaWait: CompletableDeferred<NearbyPeerLink>? = null
+    @Volatile var running = false
         private set
 
     fun start() {
         if (running) return
         running = true
+        handoffs.start()
         localName = "fg-" + ByteArray(3).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }
+        startCluster()
+    }
+
+    private fun startCluster() {
+        if (!running || handoffs.phase != MediaHandoffCoordinator.Phase.Cluster) return
         client.startAdvertising(localName, SERVICE_ID, lifecycle, AdvertisingOptions.Builder().setStrategy(STRATEGY).build())
             .addOnFailureListener { listener.onStatus("Could not advertise: ${it.message}") }
         client.startDiscovery(SERVICE_ID, discovery, DiscoveryOptions.Builder().setStrategy(STRATEGY).build())
@@ -88,6 +99,10 @@ class NearbySharing(
     fun stop() {
         if (!running) return
         running = false
+        handoffs.stop()
+        mediaWait?.completeExceptionally(IOException("Nearby stopped"))
+        mediaLink?.disconnected()
+        mediaLink = null
         client.stopAdvertising()
         client.stopDiscovery()
         client.stopAllEndpoints()
@@ -98,7 +113,7 @@ class NearbySharing(
     private val discovery = object : EndpointDiscoveryCallback() {
         override fun onEndpointFound(endpointId: String, info: DiscoveredEndpointInfo) {
             // Only the lower name asks, so two phones do not both request the same connection.
-            if (info.serviceId != SERVICE_ID || localName >= info.endpointName) return
+            if (!running || handoffs.phase != MediaHandoffCoordinator.Phase.Cluster || info.serviceId != SERVICE_ID || localName >= info.endpointName) return
             client.requestConnection(localName, endpointId, lifecycle)
                 .addOnFailureListener { listener.onStatus("Could not connect to ${info.endpointName}: ${it.message}") }
         }
@@ -108,12 +123,12 @@ class NearbySharing(
 
     private val lifecycle = object : ConnectionLifecycleCallback() {
         override fun onConnectionInitiated(endpointId: String, info: ConnectionInfo) {
-            if (!limiter.tryStart(info.endpointName)) {
+            if (!running || handoffs.phase != MediaHandoffCoordinator.Phase.Cluster || !limiter.tryStart(info.endpointName)) {
                 client.rejectConnection(endpointId)
                 return
             }
             names[endpointId] = info.endpointName
-            val link = NearbyPeerLink(client, endpointId)
+            val link = NearbyPeerLink(context, client, endpointId)
             links[endpointId] = link
             client.acceptConnection(endpointId, link.payloadCallback)
         }
@@ -129,13 +144,15 @@ class NearbySharing(
             listener.onStatus("Exchanging with $peer…")
             scope.launch(Dispatchers.IO) {
                 val bridgeTo = if (store.autoBridge()) listOf(store.relayUrl(0), store.relayUrl(1)) else emptyList()
-                val report = try { NearbyExchange(store, bridgeTo = bridgeTo, media = media).run(link) } finally {
+                val report = try { NearbyExchange(store, bridgeTo = bridgeTo, media = media, fastMedia = mediaHandoff(endpointId)).run(link) } finally {
                     link.awaitFlushed(5_000)
-                    client.disconnectFromEndpoint(endpointId)
-                    release(endpointId)
+                    if (links[endpointId] === link) {
+                        client.disconnectFromEndpoint(endpointId)
+                        release(endpointId)
+                    }
                 }
                 if (report.received > 0 && bridgeTo.isNotEmpty()) RelayRetryWorker.schedule(context)
-                withContext(Dispatchers.Main) { listener.onExchange(peer, report) }
+                withContext(Dispatchers.Main) { if (running) listener.onExchange(peer, report) }
             }
         }
 
@@ -149,48 +166,121 @@ class NearbySharing(
         names.remove(endpointId)
     }
 
+    private fun wifiEnabled(): Boolean = isWifiEnabled(context)
+
+    private fun mediaHandoff(endpointId: String) = object : FastMediaHandoff {
+        private var lease: MediaHandoffCoordinator.Lease? = null
+        private var token: String? = null
+        override val available: Boolean get() = wifiEnabled()
+        override fun reserve(): String? {
+            if (!wifiEnabled()) return null
+            lease = handoffs.reserve(endpointId) ?: return null
+            return ByteArray(32).also(SecureRandom()::nextBytes).joinToString("") { "%02x".format(it) }.also { token = it }
+        }
+        override suspend fun transfer(peerToken: String, exchange: suspend (FilePeerLink, Boolean) -> FastPhotoReport): FastPhotoReport {
+            val own = token ?: throw IOException("Media not reserved")
+            val reservation = lease ?: throw IOException("Media not reserved")
+            val session = sha256Hex(listOf(own, peerToken).sorted().joinToString("").toByteArray(Charsets.UTF_8))
+            return try {
+                withTimeout(5 * 60_000L) {
+                    links[endpointId]?.awaitFlushed(5_000)
+                    withTimeoutOrNull(15_000) { while (links.keys.any { it != endpointId }) delay(50) }
+                    val connection = withContext(Dispatchers.Main) {
+                        if (!running || !handoffs.connecting(reservation)) throw IOException("Media cancelled")
+                        stopRadioOperations()
+                        connectMedia(reservation, own, peerToken)
+                    }
+                    withContext(Dispatchers.Main) {
+                        if (!running || !handoffs.transferring(reservation)) throw IOException("Media cancelled")
+                        listener.onStatus("Transferring photos with one phone. Sharing with other phones resumes afterward.")
+                    }
+                    connection.send(NearbyFrames.encode(NearbyFrame.MediaGo(session)))
+                    val proof = withTimeout(15_000) { connection.receive() } ?: throw IOException("Media peer left")
+                    check(NearbyFrames.parse(proof) == NearbyFrame.MediaGo(session)) { "Wrong media session" }
+                    val result = exchange(connection, own < peerToken)
+                    connection.awaitFlushed(5_000)
+                    result
+                }
+            } catch (failure: kotlinx.coroutines.TimeoutCancellationException) { FastPhotoReport(0, 0, "Media timed out") }
+            catch (failure: CancellationException) { throw failure }
+            catch (failure: IOException) { FastPhotoReport(0, 0, "Media disconnected") }
+            catch (failure: IllegalArgumentException) { FastPhotoReport(0, 0, "Invalid media session") }
+            catch (failure: IllegalStateException) { FastPhotoReport(0, 0, "Invalid media session") }
+            finally {
+                // A reservation must remain active until old radio operations have been stopped.
+                withContext(NonCancellable + Dispatchers.Main) {
+                    if (handoffs.returning(reservation)) {
+                        stopRadioOperations()
+                        mediaLink?.disconnected(); mediaLink = null
+                        mediaWait = null
+                        if (running && handoffs.resume(reservation)) startCluster()
+                    }
+                }
+            }
+        }
+        override fun release() {
+            lease?.let { handoffs.resume(it) }
+            lease = null; token = null
+        }
+    }
+
+    private fun stopRadioOperations() {
+        client.stopAdvertising(); client.stopDiscovery(); client.stopAllEndpoints()
+        links.values.forEach { it.disconnected() }
+        links.keys.toList().forEach(::release)
+    }
+
+    private suspend fun connectMedia(lease: MediaHandoffCoordinator.Lease, own: String, peer: String): NearbyPeerLink {
+        if (!running || !handoffs.current(lease) || handoffs.phase != MediaHandoffCoordinator.Phase.Connecting) throw IOException("Media cancelled")
+        val ready = CompletableDeferred<NearbyPeerLink>()
+        mediaWait = ready
+        val mediaLinks = ConcurrentHashMap<String, NearbyPeerLink>()
+        val callbacks = object : ConnectionLifecycleCallback() {
+            override fun onConnectionInitiated(id: String, info: ConnectionInfo) {
+                if (!running || !handoffs.current(lease) || handoffs.phase != MediaHandoffCoordinator.Phase.Connecting || info.endpointName != peer || mediaLinks.isNotEmpty()) {
+                    client.rejectConnection(id); return
+                }
+                val link = NearbyPeerLink(context, client, id, filesEnabled = true)
+                mediaLinks[id] = link
+                client.acceptConnection(id, link.payloadCallback).addOnFailureListener { ready.completeExceptionally(IOException("Media connection rejected", it)) }
+            }
+            override fun onConnectionResult(id: String, result: ConnectionResolution) {
+                val link = mediaLinks[id] ?: return
+                if (!running || !handoffs.current(lease) || handoffs.phase != MediaHandoffCoordinator.Phase.Connecting || !result.status.isSuccess) {
+                    link.disconnected(); client.disconnectFromEndpoint(id)
+                    ready.completeExceptionally(IOException("Media connection failed")); return
+                }
+                mediaLink = link
+                ready.complete(link)
+            }
+            override fun onDisconnected(id: String) {
+                mediaLinks[id]?.disconnected()
+                ready.completeExceptionally(IOException("Media peer left"))
+            }
+        }
+        if (own < peer) {
+            client.startAdvertising(own, MEDIA_SERVICE_ID, callbacks, AdvertisingOptions.Builder().setStrategy(Strategy.P2P_POINT_TO_POINT).build())
+                .addOnFailureListener { ready.completeExceptionally(IOException("Could not advertise media", it)) }
+        } else {
+            client.startDiscovery(MEDIA_SERVICE_ID, object : EndpointDiscoveryCallback() {
+                override fun onEndpointFound(id: String, info: DiscoveredEndpointInfo) {
+                    if (!running || !handoffs.current(lease) || handoffs.phase != MediaHandoffCoordinator.Phase.Connecting || info.endpointName != peer || info.serviceId != MEDIA_SERVICE_ID) return
+                    client.requestConnection(own, id, callbacks).addOnFailureListener { ready.completeExceptionally(IOException("Could not connect media", it)) }
+                }
+                override fun onEndpointLost(id: String) = Unit
+            }, DiscoveryOptions.Builder().setStrategy(Strategy.P2P_POINT_TO_POINT).build())
+                .addOnFailureListener { ready.completeExceptionally(IOException("Could not search media", it)) }
+        }
+        var connected = false
+        return try { withTimeout(30_000) { ready.await() }.also { connected = true } }
+        finally {
+            if (!connected) { ready.cancel(); mediaLinks.values.forEach { it.disconnected() } }
+        }
+    }
+
     companion object {
+        private const val MEDIA_SERVICE_ID = "org.freegram.media.v2"
         private const val SERVICE_ID = "org.freegram.bulletin.v1"
         private val STRATEGY = Strategy.P2P_CLUSTER
     }
-}
-
-/** One Nearby endpoint as a [PeerLink]. Each frame is one BYTES payload. */
-private class NearbyPeerLink(private val client: ConnectionsClient, private val endpointId: String) : PeerLink {
-    private val inbox = Channel<String>(64)
-    private val pending = ConcurrentHashMap.newKeySet<Long>()
-
-    val payloadCallback = object : PayloadCallback() {
-        override fun onPayloadReceived(endpointId: String, payload: Payload) {
-            val bytes = payload.asBytes()
-            val accepted = payload.type == Payload.Type.BYTES && bytes != null && bytes.size <= NearbyFrames.MAX_CHUNK_FRAME_BYTES &&
-                inbox.trySend(String(bytes, Charsets.UTF_8)).isSuccess
-            // Wrong type, oversized or flooding: drop the peer rather than buffer.
-            if (!accepted) {
-                inbox.close()
-                client.disconnectFromEndpoint(endpointId)
-            }
-        }
-
-        override fun onPayloadTransferUpdate(endpointId: String, update: PayloadTransferUpdate) {
-            if (update.status != PayloadTransferUpdate.Status.IN_PROGRESS) pending.remove(update.payloadId)
-        }
-    }
-
-    override suspend fun send(frame: String) {
-        val payload = Payload.fromBytes(frame.toByteArray(Charsets.UTF_8))
-        pending += payload.id
-        client.sendPayload(endpointId, payload).addOnFailureListener { pending.remove(payload.id) }
-    }
-
-    override suspend fun receive(): String? = inbox.receiveCatching().getOrNull()
-
-    /** The adapter disconnects after [awaitFlushed], so the last ACK or SENT is not cut off. */
-    override fun close() = Unit
-
-    suspend fun awaitFlushed(timeoutMs: Long) {
-        withTimeoutOrNull(timeoutMs) { while (pending.isNotEmpty()) delay(50) }
-    }
-
-    fun disconnected() { inbox.close() }
 }

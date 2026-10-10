@@ -39,4 +39,19 @@ class MediaHandoffTest {
         assertTrue(c.resume(next))
         assertEquals(MediaHandoffCoordinator.Phase.Cluster, c.phase)
     }
+    @Test fun stoppingAtAnyStagePreventsLateRestart() {
+        for (stage in 0..3) {
+            val c = MediaHandoffCoordinator(); c.start()
+            val lease = c.reserve("peer")!!
+            if (stage >= 1) assertTrue(c.connecting(lease))
+            if (stage >= 2) assertTrue(c.transferring(lease))
+            if (stage >= 3) assertTrue(c.returning(lease))
+            c.stop()
+            assertFalse(c.connecting(lease))
+            assertFalse(c.transferring(lease))
+            assertFalse(c.resume(lease))
+            assertEquals(MediaHandoffCoordinator.Phase.Stopped, c.phase)
+        }
+    }
+
 }
