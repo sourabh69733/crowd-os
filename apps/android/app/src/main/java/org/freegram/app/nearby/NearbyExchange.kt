@@ -47,6 +47,7 @@ class NearbyExchange(
     /** Photo storage; null disables the photo round. */
     private val media: MediaStore? = null,
     private val photoCheck: (ByteArray, PhotoRef) -> Boolean = PhotoEncoder::isValidPhoto,
+    private val fastMedia: FastMediaHandoff? = null,
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private class ProtocolError(message: String) : Exception(message)
@@ -67,7 +68,8 @@ class NearbyExchange(
         fun report(outcome: String) = ExchangeReport(offered, sent, acknowledged, received, rejected, outcome, photosReceived, photosSent)
 
         return try {
-            send(NearbyFrame.Hello(NearbyFrames.VERSION, media = media != null))
+            val fastSupported = media != null && fastMedia?.available == true
+            send(NearbyFrame.Hello(NearbyFrames.VERSION, media = media != null, fastMedia = fastSupported))
             val hello = next() as? NearbyFrame.Hello ?: throw ProtocolError("Expected HELLO")
             if (hello.version != NearbyFrames.VERSION) throw ProtocolError("Unsupported version ${hello.version}")
 
@@ -118,6 +120,26 @@ class NearbyExchange(
                 send(NearbyFrame.BlobWant(photosWanted.toList()))
                 val theirPhotoWant = next() as? NearbyFrame.BlobWant ?: throw ProtocolError("Expected BLOBWANT")
                 if (!myPhotos.containsAll(theirPhotoWant.hashes)) throw ProtocolError("Requested a photo that was not offered")
+
+                if (hello.fastMedia && fastSupported && fastMedia != null) {
+                    val token = if (photosWanted.isNotEmpty() || theirPhotoWant.hashes.isNotEmpty()) fastMedia.reserve() else null
+                    send(NearbyFrame.MediaReady(token))
+                    val peerReady = next() as? NearbyFrame.MediaReady ?: throw ProtocolError("Expected media readiness")
+                    if (token != null && peerReady.token != null) {
+                        if (token == peerReady.token) throw ProtocolError("Repeated rendezvous token")
+                        val session = org.freegram.app.media.sha256Hex(listOf(token, peerReady.token).sorted().joinToString("").toByteArray(Charsets.UTF_8))
+                        send(NearbyFrame.MediaGo(session))
+                        if (next() != NearbyFrame.MediaGo(session)) throw ProtocolError("Wrong media session")
+                        val sentRefs = offers.values.mapNotNull { PhotoRef.of(it.first) }.filter { it.sha256 in theirPhotoWant.hashes }
+                        val receivedRefs = photosWanted.mapNotNull { missing[it] }
+                        val result = fastMedia.transfer(peerReady.token) { fileLink, sendsFirst ->
+                            FastPhotoExchange(store, media, photoCheck).run(fileLink, sentRefs, receivedRefs, sendsFirst)
+                        }
+                        photosSent = result.sent; photosReceived = result.received
+                        return report(result.outcome)
+                    }
+                    fastMedia.release()
+                }
 
                 val awaitingPhotoAck = mutableSetOf<String>()
                 for (sha in theirPhotoWant.hashes) {
@@ -170,6 +192,7 @@ class NearbyExchange(
         } catch (failure: CancellationException) {
             throw failure
         } finally {
+            fastMedia?.release()
             link.close()
         }
     }

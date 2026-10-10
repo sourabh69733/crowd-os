@@ -17,10 +17,12 @@ Old peers ignore new HELLO fields; failed negotiation must not strand chunk exch
 ## Tasks and ledger
 
 - [x] 1. Protocol/coordinator: add optional fast-photo capability and bounded handoff/file control frames to NearbyFrames; add MediaHandoffCoordinator with generation-bound leases and cluster/preparing/connecting/transferring/stopped states. Tests pin old HELLO parsing, malformed tokens/descriptors and stop/stale leases. Run failing tests, implement, verify, commit.
-- [ ] 2. File exchange: add FilePeerLink and FastPhotoExchange with deterministic directions, descriptor-ready-file-ACK sequence, timeout and bounded file reads. Check requested hashes, size, hash, image and current moderation before durable ACK. Extend NearbyExchange with optional FastMediaHandoff; negotiate reservation only after inventories; retain existing chunks when unavailable. Tests cover real exchange plans, old peers, busy reservation, corrupt/hidden files and transfer order. Run failing tests, implement, verify, commit.
+- [x] 2. File exchange: add FilePeerLink and FastPhotoExchange with deterministic directions, descriptor-ready-file-ACK sequence, timeout and bounded file reads. Check requested hashes, size, hash, image and current moderation before durable ACK. Extend NearbyExchange with optional FastMediaHandoff; negotiate reservation only after inventories; retain existing chunks when unavailable. Tests cover real exchange plans, old peers, busy reservation, corrupt/hidden files and transfer order. Run failing tests, implement, verify, commit.
 - [ ] 3. Android adapter: extract NearbyPeerLink, track expected FILE payloads and transfer-success independently, bounded cleanup and cancellation. Integrate media rendezvous and single-strategy pause/restart into NearbySharing with 15s drain, 30s reconnect, 120s/file, 5min batch. Test callback order and cancellation with injectable fakes. Verify and commit.
 - [ ] 4. UI and release: expose actual Wi-Fi state in NearbyUi, open Android Wi-Fi panel, refresh on resume, retain Stop and duration state; update protocol and progress docs with built versus device-tested boundary. Run testDebugUnitTest assembleRelease, review, fix, commit.
 
 Media server, resumable video, direct sharing and offline metadata remain subsequent independent slices. Do not claim them complete from the fast-photo slice.
 
 Task 1: failing compile confirmed missing API; full existing suite plus 3 new tests passed.
+
+Task 2: new file API tests failed before implementation, then the full suite passed including negotiated handoff and busy-peer chunk fallback.
