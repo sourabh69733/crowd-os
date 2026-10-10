@@ -289,5 +289,56 @@ class RoomStoreTest {
         store.close()
     }
 
+    @Test fun discoverStoresOnlyEligibleTopLevelPostsWithoutDeliveries() = runBlocking {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val good = signedBy(3, 1_700_000_000)
+        val muted = signedBy(4, 1_700_000_001)
+        val blocked = signedBy(5, 1_700_000_002)
+        store.setAuthorState(muted.pubkey, AuthorState.MUTED)
+        store.setAuthorState(blocked.pubkey, AuthorState.BLOCKED)
+        val reply = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = 6 }, "reply", 1_700_000_003,
+            arrayOf(arrayOf("e", good.id, "", "root")))
+        val hiddenPost = signedBy(7, 1_700_000_004)
+        val hiddenAuthor = signedBy(8, 1_700_000_005)
+        val maintainerKey = ByteArray(32).also { it[31] = 9 }
+        val maintainer = signedBy(9, 1_700_000_000).pubkey
+        store.setMaintainer(maintainer, true)
+        val hideList = org.freegram.app.moderation.HideList(maintainer, 1_700_000_010, setOf(hiddenPost.id), setOf(hiddenAuthor.pubkey))
+        store.saveHideList(Nip01Protocol.signEvent(maintainerKey, org.freegram.app.moderation.HideList.KIND, "", 1_700_000_010, hideList.toTags()))
+        store.saveDiscoverEvents(listOf(good, muted, blocked, reply, hiddenPost, hiddenAuthor, good.copy(content = "tampered")))
+        assertEquals(listOf(good), store.savedEvents())
+        assertEquals(listOf(good to 0), store.nearbyOffers(0, Long.MAX_VALUE, 12, 128))
+        assertTrue(store.deliveryTargets(good.id).isEmpty())
+        store.close()
+        val reopened = RoomStore(context, databaseName)
+        assertEquals(listOf(good), reopened.savedEvents())
+        reopened.close()
+    }
+
+    @Test fun discoverRespectsCapacityAuthorLimitAndProtectsUnsentPosts() = runBlocking<Unit> {
+        val store = RoomStore(context, databaseName)
+        store.initialize()
+        val own = event(1_600_000_000).also { store.saveEvent(it, relayTargets) }
+        store.saveDiscoverEvents((0 until 120).map { signedBy(10 + it % 5, 1_700_000_000L + it) })
+        assertEquals(100, store.savedEvents().size)
+        assertTrue(store.hasBulletin(own.id))
+        assertTrue(store.savedEvents().groupBy { it.pubkey }.values.all { it.size <= 20 })
+        val oldest = store.savedEvents().filter { it.id != own.id }.minBy { it.createdAt }
+        val fresh = signedBy(9, 1_700_001_000)
+        store.saveDiscoverEvents(listOf(fresh))
+        assertFalse(store.hasBulletin(oldest.id))
+        assertTrue(store.hasBulletin(fresh.id))
+        store.close()
+
+        val full = RoomStore(context, "full-$databaseName")
+        full.initialize()
+        repeat(100) { full.saveEvent(event(1_600_000_000L + it), relayTargets) }
+        full.saveDiscoverEvents(listOf(fresh))
+        assertEquals(100, full.savedEvents().size)
+        assertFalse(full.hasBulletin(fresh.id))
+        full.close()
+        context.deleteDatabase("full-$databaseName")
+    }
 
 }

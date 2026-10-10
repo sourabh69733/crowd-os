@@ -7,6 +7,7 @@ import kotlinx.coroutines.sync.Mutex
 import kotlinx.coroutines.sync.withLock
 import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
+import org.freegram.app.protocol.Replies
 import org.freegram.shared.model.NearbyReach
 import org.freegram.app.moderation.HideList
 import org.freegram.app.relay.RetryPolicy
@@ -80,6 +81,17 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     fun nearbyReach(): NearbyReach = NearbyReach.entries.firstOrNull { it.name == prefs.getString("nearby_reach", null) } ?: NearbyReach.Medium
     fun setNearbyReach(reach: NearbyReach) { check(prefs.edit().putString("nearby_reach", reach.name).commit()) }
+
+    /** Carry eligible Discover posts without adding relay deliveries or server-fetched replies. */
+    suspend fun saveDiscoverEvents(events: List<BulletinEvent>) = database.withTransaction {
+        val excluded = dao.authorPolicies().filter { it.state != AuthorState.FOLLOWING.name }.map { it.pubkey }.toSet()
+        val hidden = hidden()
+        for (event in events) {
+            if (!Nip01Protocol.verifyBulletin(event) || Replies.rootOf(event) != null || event.pubkey in excluded || hidden.covers(event)) continue
+            if (!dao.hasBulletin(event.id) && dao.bulletinCount() >= MAX_BULLETINS && evictionVictim() == null) continue
+            saveReceivedEvent(event)
+        }
+    }
 
     suspend fun hasBulletin(eventId: String): Boolean = dao.hasBulletin(eventId)
 

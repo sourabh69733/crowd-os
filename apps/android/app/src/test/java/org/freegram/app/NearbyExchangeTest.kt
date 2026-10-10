@@ -295,5 +295,27 @@ class NearbyExchangeTest {
         }
     }
 
+    @Test fun phonesApplyTheirOwnSettingsAndCarryDiscoverPosts() = runBlocking {
+        val short = phone(); val far = phone()
+        short.setNearbyReach(org.freegram.shared.model.NearbyReach.Short)
+        far.setNearbyReach(org.freegram.shared.model.NearbyReach.Far)
+        val tooFarForShort = post(3, "already travelled")
+        val news = post(4, "news from Discover")
+        far.saveNearbyEvent(tooFarForShort, 10)
+        far.saveDiscoverEvents(listOf(news))
+        val (a, b) = linkPair()
+        coroutineScope {
+            val shortReport = async { NearbyExchange(short, now = { now }).run(a) }
+            val farReport = async { NearbyExchange(far, now = { now }).run(b) }
+            assertEquals(1, shortReport.await().received)
+            assertEquals(1, shortReport.await().rejected)
+            assertEquals(2, farReport.await().offered)
+        }
+        assertFalse(short.hasBulletin(tooFarForShort.id))
+        assertTrue(short.hasBulletin(news.id))
+        assertEquals(0, far.hopsById()[news.id])
+        assertEquals(1, short.hopsById()[news.id])
+        assertTrue(far.deliveryTargets(news.id).isEmpty())
+    }
 
 }

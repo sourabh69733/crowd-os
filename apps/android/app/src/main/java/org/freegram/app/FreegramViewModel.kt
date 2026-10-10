@@ -722,6 +722,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
                 val events = results.flatMap { it.events }.distinctBy { it.id }.sortedByDescending { it.createdAt }.take(DISCOVER_LIMIT)
                 val keys = maintainers.filter { it.enabled }.map { it.pubkey }
                 val suggestions = if (keys.isEmpty()) emptyList() else fetchSuggestions(keys)
+                io { store.saveDiscoverEvents(events) }
+                refreshLists()
                 discoverEvents = events
                 suggestedKeys = suggestions
                 // Names for new faces, so cards don't show only IDs.
@@ -757,7 +759,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         val followed = policies.filterValues { it == AuthorState.FOLLOWING }.keys
         discoverPosts = io {
             discoverEvents.filter { e ->
-                Replies.rootOf(e) == null && !hidden.covers(e) && policies[e.pubkey].let { it != AuthorState.BLOCKED && it != AuthorState.MUTED }
+                Nip01Protocol.verifyBulletin(e) && Replies.rootOf(e) == null && !hidden.covers(e) && policies[e.pubkey].let { it != AuthorState.BLOCKED && it != AuthorState.MUTED }
             }.map { toPostUi(it, 0, emptyList(), followed) }
         }
     }
