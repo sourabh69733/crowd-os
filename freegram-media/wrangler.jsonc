@@ -1,0 +1,10 @@
+{
+  "name": "freegram-media",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-10",
+  "routes": [{ "pattern": "media.freegram.in", "custom_domain": true }],
+  "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "freegram-media" }],
+  "durable_objects": { "bindings": [{ "name": "UPLOADS", "class_name": "Uploads" }] },
+  "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Uploads"] }],
+  "vars": { "UPLOAD_KEYS": "*", "MAX_STORAGE_BYTES": "1073741824", "BLOCKED_HASHES": "" }
+}

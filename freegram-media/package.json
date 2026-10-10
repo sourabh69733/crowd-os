@@ -1,0 +1,13 @@
+{
+  "name": "freegram-media",
+  "private": true,
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "deploy": "wrangler deploy"
+  },
+  "dependencies": {
+    "@noble/curves": "2.0.1",
+    "jpeg-js": "^0.4.4"
+  }
+}
