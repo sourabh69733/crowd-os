@@ -72,16 +72,21 @@ class FastPhotoExchangeTest {
         val ref = PhotoRef(sha256Hex(bytes), bytes.size, 20, 20)
         val event = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = 3 }, "photo", 1_700_000_000, arrayOf(ref.toTag()))
         a.saveReceivedEvent(event); b.saveReceivedEvent(event)
-        am.put(ref.sha256, bytes, emptySet())
+        val otherBytes = ByteArray(1024) { 8 }
+        val otherRef = PhotoRef(sha256Hex(otherBytes), otherBytes.size, 20, 20)
+        val otherEvent = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = 4 }, "second photo", 1_700_000_001, arrayOf(otherRef.toTag()))
+        a.saveReceivedEvent(otherEvent); b.saveReceivedEvent(otherEvent)
+        am.put(ref.sha256, bytes, emptySet()); bm.put(otherRef.sha256, otherBytes, emptySet())
         val (la, lb) = links()
         coroutineScope {
-            val sent = async { FastPhotoExchange(a, am, photoCheck = { _, _ -> true }).run(la, listOf(ref), emptyList(), true) }
-            val received = async { FastPhotoExchange(b, bm, photoCheck = { _, _ -> true }).run(lb, emptyList(), listOf(ref), false) }
+            val sent = async { FastPhotoExchange(a, am, photoCheck = { _, _ -> true }).run(la, listOf(ref), listOf(otherRef), true) }
+            val received = async { FastPhotoExchange(b, bm, photoCheck = { _, _ -> true }).run(lb, listOf(otherRef), listOf(ref), false) }
             assertEquals(1, sent.await().sent)
             assertEquals(1, received.await().received)
         }
         assertEquals(1, la.fileSends)
         assertArrayEquals(bytes, bm.read(ref.sha256))
+        assertArrayEquals(otherBytes, am.read(otherRef.sha256))
     }
 
     @Test fun corruptedAndNewlyBlockedPhotosAreNotAcknowledged() = runBlocking {
@@ -111,7 +116,9 @@ class FastPhotoExchangeTest {
             val bytes = ByteArray(1024) { 7 }
             val ref = PhotoRef(sha256Hex(bytes), bytes.size, 20, 20)
             val event = Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = 3 }, "photo", 1_700_000_000, arrayOf(ref.toTag()))
-            a.saveReceivedEvent(event); am.put(ref.sha256, bytes, emptySet())
+            a.saveReceivedEvent(event)
+            repeat(10) { index -> a.saveReceivedEvent(Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = (4 + index).toByte() }, "same photo $index", 1_700_000_001L + index, arrayOf(ref.toTag()))) }
+            am.put(ref.sha256, bytes, emptySet())
             val (la, lb) = links()
             var handoffs = 0
             fun hook(token: String, link: Link) = object : org.freegram.app.nearby.FastMediaHandoff {
@@ -128,7 +135,7 @@ class FastPhotoExchangeTest {
                 val received = async { org.freegram.app.nearby.NearbyExchange(b, media = bm, photoCheck = { _, _ -> true }, fastMedia = hook("02".repeat(32), lb), now = { 1_700_000_060 }).run(lb) }
                 assertEquals(1, sent.await().photosSent)
                 assertEquals(1, received.await().photosReceived)
-                assertEquals(1, received.await().received)
+                assertEquals(11, received.await().received)
             }
             assertEquals(if (busy) 0 else 2, handoffs)
             assertEquals(if (busy) 0 else 1, la.fileSends)

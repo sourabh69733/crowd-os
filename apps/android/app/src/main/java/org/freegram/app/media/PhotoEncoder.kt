@@ -57,6 +57,7 @@ object PhotoEncoder {
         if (bytes.size != ref.size || bytes.size < 3 || bytes[0] != 0xFF.toByte() || bytes[1] != 0xD8.toByte()) return false
         val bounds = BitmapFactory.Options().apply { inJustDecodeBounds = true }
         BitmapFactory.decodeByteArray(bytes, 0, bytes.size, bounds)
-        return bounds.outWidth in 1..PhotoRef.MAX_DIMENSION && bounds.outHeight in 1..PhotoRef.MAX_DIMENSION
+        return bounds.outWidth in 1..PhotoRef.MAX_DIMENSION && bounds.outHeight in 1..PhotoRef.MAX_DIMENSION &&
+            bounds.outWidth == ref.width && bounds.outHeight == ref.height
     }
 }

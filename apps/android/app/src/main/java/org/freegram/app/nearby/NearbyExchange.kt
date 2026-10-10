@@ -3,7 +3,14 @@ package org.freegram.app.nearby
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.TimeoutCancellationException
 import java.io.ByteArrayOutputStream
+import java.io.IOException
 import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.coroutineScope
+import kotlinx.coroutines.launch
+import kotlinx.coroutines.async
+import kotlinx.coroutines.Deferred
+import kotlinx.coroutines.CompletableDeferred
+import kotlinx.coroutines.selects.select
 import kotlinx.coroutines.withContext
 import kotlinx.coroutines.withTimeout
 import org.freegram.app.media.MediaStore
@@ -57,9 +64,9 @@ class NearbyExchange(
         var offered = 0; var sent = 0; var acknowledged = 0; var received = 0; var rejected = 0
         var photosReceived = 0; var photosSent = 0
         var frames = 0
-        suspend fun next(): NearbyFrame {
+        suspend fun next(timeoutMs: Long = policy.frameTimeoutMs): NearbyFrame {
             if (++frames > policy.maxFrames) throw ProtocolError("Frame limit reached")
-            val text = withTimeout(policy.frameTimeoutMs) { link.receive() } ?: throw Disconnected()
+            val text = withTimeout(timeoutMs) { link.receive() } ?: throw Disconnected()
             return try { NearbyFrames.parse(text) } catch (failure: IllegalArgumentException) {
                 throw ProtocolError(failure.message ?: "Malformed frame")
             }
@@ -121,7 +128,7 @@ class NearbyExchange(
                 val theirPhotoWant = next() as? NearbyFrame.BlobWant ?: throw ProtocolError("Expected BLOBWANT")
                 if (!myPhotos.containsAll(theirPhotoWant.hashes)) throw ProtocolError("Requested a photo that was not offered")
 
-                if (hello.fastMedia && fastSupported && fastMedia != null) {
+                if (hello.fastMedia && fastSupported) {
                     val token = if (photosWanted.isNotEmpty() || theirPhotoWant.hashes.isNotEmpty()) fastMedia.reserve() else null
                     send(NearbyFrame.MediaReady(token))
                     val peerReady = next() as? NearbyFrame.MediaReady ?: throw ProtocolError("Expected media readiness")
@@ -130,7 +137,7 @@ class NearbyExchange(
                         val session = org.freegram.app.media.sha256Hex(listOf(token, peerReady.token).sorted().joinToString("").toByteArray(Charsets.UTF_8))
                         send(NearbyFrame.MediaGo(session))
                         if (next() != NearbyFrame.MediaGo(session)) throw ProtocolError("Wrong media session")
-                        val sentRefs = offers.values.mapNotNull { PhotoRef.of(it.first) }.filter { it.sha256 in theirPhotoWant.hashes }
+                        val sentRefs = offers.values.mapNotNull { PhotoRef.of(it.first) }.filter { it.sha256 in theirPhotoWant.hashes }.distinctBy { it.sha256 }
                         val receivedRefs = photosWanted.mapNotNull { missing[it] }
                         val result = fastMedia.transfer(peerReady.token) { fileLink, sendsFirst ->
                             FastPhotoExchange(store, media, photoCheck).run(fileLink, sentRefs, receivedRefs, sendsFirst)
@@ -141,50 +148,73 @@ class NearbyExchange(
                     fastMedia.release()
                 }
 
-                val awaitingPhotoAck = mutableSetOf<String>()
-                for (sha in theirPhotoWant.hashes) {
-                    val bytes = io { media.read(sha) } ?: continue
-                    send(NearbyFrame.Blob(sha, bytes.size))
-                    for ((index, start) in (bytes.indices step NearbyFrames.CHUNK_BYTES).withIndex()) {
-                        send(NearbyFrame.Chunk(sha, index, bytes.copyOfRange(start, minOf(start + NearbyFrames.CHUNK_BYTES, bytes.size))))
-                    }
-                    awaitingPhotoAck += sha
-                }
-                send(NearbyFrame.BlobSent)
-
-                var peerPhotosSent = false
-                var incoming: Incoming? = null
-                while (!peerPhotosSent || awaitingPhotoAck.isNotEmpty()) {
-                    when (val frame = next()) {
-                        is NearbyFrame.Blob -> {
-                            if (incoming != null) throw ProtocolError("Overlapping photos")
-                            incoming = Incoming(frame.sha256, frame.size, missing[frame.sha256].takeIf { photosWanted.remove(frame.sha256) })
-                        }
-                        is NearbyFrame.Chunk -> {
-                            val photo = incoming ?: throw ProtocolError("Chunk without photo")
-                            if (frame.sha256 != photo.sha256 || frame.index != photo.nextIndex) throw ProtocolError("Out-of-order chunk")
-                            photo.add(frame.data)
-                            if (photo.received > photo.size) throw ProtocolError("Photo larger than announced")
-                            if (photo.received == photo.size) {
-                                incoming = null
-                                val reason = if (photo.ref == null) "unrequested" else storePhoto(photo.ref, photo.bytes())
-                                if (reason == null) { photosReceived++; send(NearbyFrame.BlobAck(photo.sha256)) }
-                                else send(NearbyFrame.BlobNack(photo.sha256, reason))
+                withTimeout(5 * 60_000L) { coroutineScope {
+                    val awaitingPhotoAck = java.util.concurrent.ConcurrentHashMap.newKeySet<String>().also { it.addAll(theirPhotoWant.hashes) }
+                    val photoDone = theirPhotoWant.hashes.associateWith { CompletableDeferred<Unit>() }
+                    val sending = launch {
+                        for (sha in theirPhotoWant.hashes) { withTimeout(120_000) {
+                            val eligible = store.savedEvents().any { PhotoRef.of(it)?.sha256 == sha }
+                            val bytes = if (eligible) io { media.read(sha) } else null
+                            if (bytes == null) { awaitingPhotoAck.remove(sha); return@withTimeout }
+                            send(NearbyFrame.Blob(sha, bytes.size))
+                            for ((index, start) in (bytes.indices step NearbyFrames.CHUNK_BYTES).withIndex()) {
+                                send(NearbyFrame.Chunk(sha, index, bytes.copyOfRange(start, minOf(start + NearbyFrames.CHUNK_BYTES, bytes.size))))
                             }
-                        }
-                        is NearbyFrame.BlobAck -> if (awaitingPhotoAck.remove(frame.sha256)) photosSent++
-                        is NearbyFrame.BlobNack -> awaitingPhotoAck.remove(frame.sha256)
-                        NearbyFrame.BlobSent -> {
-                            if (incoming != null) throw ProtocolError("Incomplete photo")
-                            peerPhotosSent = true
-                        }
-                        else -> throw ProtocolError("Unexpected frame")
+                            withTimeout(policy.frameTimeoutMs) { photoDone.getValue(sha).await() }
+                        } }
+                        send(NearbyFrame.BlobSent)
                     }
-                }
+
+                    var peerPhotosSent = false
+                    var incoming: Incoming? = null
+                    var pendingFrame: Deferred<NearbyFrame>? = null
+                    while (!peerPhotosSent || awaitingPhotoAck.isNotEmpty() || !sending.isCompleted) {
+                        if (pendingFrame == null) pendingFrame = async { next(if (sending.isCompleted) policy.frameTimeoutMs else 120_000) }
+                        val frame = if (!sending.isCompleted) select<NearbyFrame?> {
+                            pendingFrame.onAwait { it }
+                            sending.onJoin { null }
+                        } else pendingFrame.await()
+                        if (frame == null) continue
+                        pendingFrame = null
+                        when (frame) {
+                            is NearbyFrame.Blob -> {
+                                if (incoming != null) throw ProtocolError("Overlapping photos")
+                                incoming = Incoming(frame.sha256, frame.size, missing[frame.sha256].takeIf { photosWanted.remove(frame.sha256) })
+                            }
+                            is NearbyFrame.Chunk -> {
+                                val photo = incoming ?: throw ProtocolError("Chunk without photo")
+                                if (frame.sha256 != photo.sha256 || frame.index != photo.nextIndex) throw ProtocolError("Out-of-order chunk")
+                                photo.add(frame.data)
+                                if (photo.received > photo.size) throw ProtocolError("Photo larger than announced")
+                                if (photo.received == photo.size) {
+                                    incoming = null
+                                    val reason = if (photo.ref == null) "unrequested" else storePhoto(photo.ref, photo.bytes())
+                                    if (reason == null) { photosReceived++; launch { send(NearbyFrame.BlobAck(photo.sha256)) } }
+                                    else launch { send(NearbyFrame.BlobNack(photo.sha256, reason)) }
+                                }
+                            }
+                            is NearbyFrame.BlobAck -> if (awaitingPhotoAck.remove(frame.sha256)) {
+                                photosSent++; photoDone[frame.sha256]?.complete(Unit)
+                            }
+                            is NearbyFrame.BlobNack -> {
+                                awaitingPhotoAck.remove(frame.sha256); photoDone[frame.sha256]?.complete(Unit)
+                            }
+                            NearbyFrame.BlobSent -> {
+                                if (incoming != null) throw ProtocolError("Incomplete photo")
+                                peerPhotosSent = true
+                            }
+                            else -> throw ProtocolError("Unexpected frame")
+                        }
+                    }
+                    pendingFrame?.cancel()
+                    sending.join()
+                } }
             }
             report("Complete")
         } catch (_: TimeoutCancellationException) {
             report("Timed out")
+        } catch (_: IOException) {
+            report("Disconnected")
         } catch (_: Disconnected) {
             report("Disconnected")
         } catch (failure: ProtocolError) {
@@ -209,6 +239,7 @@ class NearbyExchange(
     /** Checks and stores a received photo. Returns a BLOBNACK reason, or null once stored. */
     private suspend fun storePhoto(ref: PhotoRef, bytes: ByteArray): String? {
         val store = media ?: return "photos disabled"
+        if (!this.store.savedEvents().any { PhotoRef.of(it) == ref }) return "hidden photo"
         if (bytes.size != ref.size) return "wrong size"
         if (!photoCheck(bytes, ref)) return "not a valid photo"
         val keep = this.store.savedEvents().mapNotNull { PhotoRef.of(it)?.sha256 }.toSet()

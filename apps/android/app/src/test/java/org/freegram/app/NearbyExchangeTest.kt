@@ -318,4 +318,13 @@ class NearbyExchangeTest {
         assertTrue(far.deliveryTargets(news.id).isEmpty())
     }
 
+    @Test fun transportFailureDuringSendReportsDisconnectInsteadOfEscaping() = runBlocking<Unit> {
+        val link = object : PeerLink {
+            override suspend fun send(frame: String) { throw java.io.IOException("Radio left") }
+            override suspend fun receive(): String? = null
+            override fun close() = Unit
+        }
+        assertEquals("Disconnected", NearbyExchange(phone()).run(link).outcome)
+    }
+
 }

@@ -41,10 +41,10 @@ class NearbyPhotoTest {
         dirs.forEach { it.deleteRecursively() }
     }
 
-    private inner class Phone(val media: MediaStore? = newMedia()) {
+    private inner class Phone(val media: MediaStore? = newMedia(), val policy: org.freegram.app.nearby.NearbyPolicy = org.freegram.app.nearby.NearbyPolicy()) {
         val name = "photo-${UUID.randomUUID()}"
         val store = runBlocking { RoomStore(context, name).also { it.initialize(); stores += it to name } }
-        suspend fun exchange(link: PeerLink) = NearbyExchange(store, media = media, photoCheck = { bytes, ref -> bytes.size == ref.size }) { now }.run(link)
+        suspend fun exchange(link: PeerLink) = NearbyExchange(store, policy = policy, media = media, photoCheck = { bytes, ref -> bytes.size == ref.size }) { now }.run(link)
     }
 
     private fun newMedia(maxBytes: Long = 50L * 1024 * 1024) =
@@ -58,18 +58,23 @@ class NearbyPhotoTest {
         return Nip01Protocol.signBulletin(ByteArray(32).also { it[31] = key.toByte() }, text, now - 60, arrayOf(ref.toTag()))
     }
 
-    private class ChannelLink(private val inbox: Channel<String>, private val outbox: Channel<String>) : PeerLink {
-        override suspend fun send(frame: String) { outbox.trySend(frame) }
+    private class ChannelLink(private val inbox: Channel<String>, private val outbox: Channel<String>, private val chunkDelayMs: Long = 0) : PeerLink {
+        override suspend fun send(frame: String) {
+            if (frame.startsWith("[\"CHUNK\"")) kotlinx.coroutines.delay(chunkDelayMs)
+            outbox.send(frame)
+        }
         override suspend fun receive(): String? = inbox.receiveCatching().getOrNull()
         override fun close() { outbox.close() }
     }
 
-    private fun exchange(a: Phone, b: Phone): Pair<ExchangeReport, ExchangeReport> = runBlocking {
-        val ab = Channel<String>(Channel.UNLIMITED); val ba = Channel<String>(Channel.UNLIMITED)
-        coroutineScope {
-            val first = async { a.exchange(ChannelLink(ba, ab)) }
-            val second = async { b.exchange(ChannelLink(ab, ba)) }
-            first.await() to second.await()
+    private fun exchange(a: Phone, b: Phone, chunkDelayMs: Long = 0): Pair<ExchangeReport, ExchangeReport> = runBlocking {
+        val ab = Channel<String>(64); val ba = Channel<String>(64)
+        kotlinx.coroutines.withTimeout(30_000) {
+            coroutineScope {
+                val first = async { a.exchange(ChannelLink(ba, ab, chunkDelayMs)) }
+                val second = async { b.exchange(ChannelLink(ab, ba, chunkDelayMs)) }
+                first.await() to second.await()
+            }
         }
     }
 
@@ -257,4 +262,33 @@ class NearbyPhotoTest {
             .forEach { assertEquals(it, NearbyFrames.parse(NearbyFrames.encode(it))) }
         assertEquals(NearbyFrame.Hello(1, media = false), NearbyFrames.parse("[\"HELLO\",1,{}]"))
     }
+    @Test fun largePhotosSwapBothWaysThroughBoundedBuffers() {
+        val a = Phone(); val b = Phone()
+        repeat(4) { index ->
+            val ours = photoBytes(PhotoRef.MAX_BYTES - index)
+            val theirs = photoBytes(PhotoRef.MAX_BYTES - 10 - index)
+            a.hold(photoPost(3, ours, "ours $index"), ours)
+            b.hold(photoPost(4, theirs, "theirs $index"), theirs)
+        }
+        val (first, second) = exchange(a, b)
+        assertEquals("Complete", first.outcome)
+        assertEquals("Complete", second.outcome)
+        assertEquals(4, first.photosSent)
+        assertEquals(4, first.photosReceived)
+        assertEquals(4, second.photosSent)
+        assertEquals(4, second.photosReceived)
+    }
+
+    @Test fun slowOneWayPhotoCanProgressLongerThanFrameTimeout() {
+        val policy = org.freegram.app.nearby.NearbyPolicy(frameTimeoutMs = 200)
+        val a = Phone(policy = policy); val b = Phone(policy = policy)
+        val bytes = photoBytes(40_000)
+        a.hold(photoPost(3, bytes), bytes)
+        val (first, second) = exchange(a, b, chunkDelayMs = 100)
+        assertEquals("Complete", first.outcome)
+        assertEquals("Complete", second.outcome)
+        assertEquals(1, first.photosSent)
+        assertEquals(1, second.photosReceived)
+    }
+
 }
