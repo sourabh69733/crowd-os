@@ -6,6 +6,7 @@ import kotlinx.serialization.json.JsonObject
 import kotlinx.serialization.json.JsonPrimitive
 import kotlinx.serialization.json.buildJsonArray
 import kotlinx.serialization.json.int
+import kotlinx.serialization.json.long
 import kotlinx.serialization.json.jsonArray
 import kotlinx.serialization.json.jsonPrimitive
 import org.freegram.app.protocol.BulletinEvent
@@ -16,7 +17,7 @@ import java.util.Base64
 /** Frames of the nearby exchange, version 1. Transport metadata (hops) stays outside the signed event. */
 sealed interface NearbyFrame {
     /** [media]: this phone can exchange photos after posts. */
-    data class Hello(val version: Int, val media: Boolean = false) : NearbyFrame
+    data class Hello(val version: Int, val media: Boolean = false, val fastMedia: Boolean = false) : NearbyFrame
     data class Have(val ids: List<String>) : NearbyFrame
     data class Want(val ids: List<String>) : NearbyFrame
     data class Event(val hops: Int, val event: BulletinEvent) : NearbyFrame
@@ -33,6 +34,10 @@ sealed interface NearbyFrame {
     data class BlobAck(val sha256: String) : NearbyFrame
     data class BlobNack(val sha256: String, val reason: String) : NearbyFrame
     data object BlobSent : NearbyFrame
+    data class MediaReady(val token: String?) : NearbyFrame
+    data class MediaGo(val session: String) : NearbyFrame
+    data class FileOffer(val payloadId: Long, val sha256: String, val size: Int) : NearbyFrame
+    data class FileReady(val payloadId: Long) : NearbyFrame
 }
 
 object NearbyFrames {
@@ -50,7 +55,10 @@ object NearbyFrames {
     fun encode(frame: NearbyFrame): String = when (frame) {
         is NearbyFrame.Hello -> buildJsonArray {
             add(JsonPrimitive("HELLO")); add(JsonPrimitive(frame.version))
-            add(JsonObject(if (frame.media) mapOf("media" to JsonPrimitive(1)) else emptyMap()))
+            add(JsonObject(buildMap {
+                if (frame.media) put("media", JsonPrimitive(1))
+                if (frame.fastMedia) put("fast", JsonPrimitive(2))
+            }))
         }
         is NearbyFrame.Have -> buildJsonArray { add(JsonPrimitive("HAVE")); add(JsonArray(frame.ids.map(::JsonPrimitive))) }
         is NearbyFrame.Want -> buildJsonArray { add(JsonPrimitive("WANT")); add(JsonArray(frame.ids.map(::JsonPrimitive))) }
@@ -70,6 +78,10 @@ object NearbyFrames {
         is NearbyFrame.BlobAck -> buildJsonArray { add(JsonPrimitive("BLOBACK")); add(JsonPrimitive(frame.sha256)) }
         is NearbyFrame.BlobNack -> buildJsonArray { add(JsonPrimitive("BLOBNACK")); add(JsonPrimitive(frame.sha256)); add(JsonPrimitive(frame.reason.take(MAX_REASON))) }
         NearbyFrame.BlobSent -> buildJsonArray { add(JsonPrimitive("BLOBSENT")) }
+        is NearbyFrame.MediaReady -> buildJsonArray { add(JsonPrimitive("MEDIAREADY")); add(JsonPrimitive(frame.token.orEmpty())) }
+        is NearbyFrame.MediaGo -> buildJsonArray { add(JsonPrimitive("MEDIAGO")); add(JsonPrimitive(frame.session)) }
+        is NearbyFrame.FileOffer -> buildJsonArray { add(JsonPrimitive("FILE")); add(JsonPrimitive(frame.payloadId)); add(JsonPrimitive(frame.sha256)); add(JsonPrimitive(frame.size)) }
+        is NearbyFrame.FileReady -> buildJsonArray { add(JsonPrimitive("FILEREADY")); add(JsonPrimitive(frame.payloadId)) }
     }.toString().also { require(it.toByteArray(Charsets.UTF_8).size <= if (frame is NearbyFrame.Chunk) MAX_CHUNK_FRAME_BYTES else MAX_FRAME_BYTES) }
 
     /** Parses and bounds one frame. Signatures are checked later, before storage. */
@@ -85,6 +97,7 @@ object NearbyFrames {
                 "HELLO" -> NearbyFrame.Hello(
                     items[1].jsonPrimitive.int,
                     (items.getOrNull(2) as? JsonObject)?.get("media")?.jsonPrimitive?.content == "1",
+                    (items.getOrNull(2) as? JsonObject)?.get("fast")?.jsonPrimitive?.content == "2",
                 )
                 "HAVE" -> NearbyFrame.Have(ids(items[1], MAX_HAVE))
                 "WANT" -> NearbyFrame.Want(ids(items[1], MAX_WANT))
@@ -106,6 +119,10 @@ object NearbyFrames {
                 "BLOBACK" -> NearbyFrame.BlobAck(id(items[1].jsonPrimitive.content))
                 "BLOBNACK" -> NearbyFrame.BlobNack(id(items[1].jsonPrimitive.content), items[2].jsonPrimitive.content.take(MAX_REASON))
                 "BLOBSENT" -> NearbyFrame.BlobSent
+                "MEDIAREADY" -> { require(items.size == 2); NearbyFrame.MediaReady(items[1].jsonPrimitive.content.takeIf { it.isNotEmpty() }?.let(::id)) }
+                "MEDIAGO" -> { require(items.size == 2); NearbyFrame.MediaGo(id(items[1].jsonPrimitive.content)) }
+                "FILE" -> { require(items.size == 4); NearbyFrame.FileOffer(items[1].jsonPrimitive.long, id(items[2].jsonPrimitive.content), items[3].jsonPrimitive.int.also { require(it in 1..PhotoRef.MAX_BYTES) }) }
+                "FILEREADY" -> { require(items.size == 2); NearbyFrame.FileReady(items[1].jsonPrimitive.long) }
                 else -> throw IllegalArgumentException("Unknown frame")
             }
         } catch (failure: IllegalArgumentException) {
