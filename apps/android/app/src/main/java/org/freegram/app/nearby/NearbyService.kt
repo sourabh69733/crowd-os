@@ -23,10 +23,12 @@ import org.freegram.app.MainActivity
 import org.freegram.app.R
 import org.freegram.app.media.MediaStore
 import org.freegram.app.store.RoomStore
+import org.freegram.shared.model.NearbyRunLength
 
 /** Nearby sharing state shared by the service and the screen. */
 object NearbyState {
     val running = MutableStateFlow(false)
+    val runLength = MutableStateFlow(NearbyRunLength.TwoHours)
     val status = MutableStateFlow("")
     val log = MutableStateFlow<List<String>>(emptyList())
     /** Increments after each exchange so the screen can reload its lists. */
@@ -53,12 +55,13 @@ object NearbyState {
 
 /**
  * Runs [NearbySharing] as a foreground service, so sharing continues with the screen off, under a visible
- * notification. Started only by the user; stops on request or after [MAX_RUN_MS], and is not restarted if killed.
+ * notification. Started only by the user; stops on request or after the selected run length, and is not restarted if killed.
  */
 class NearbyService : Service() {
     private val scope = CoroutineScope(SupervisorJob() + Dispatchers.Main)
     private var sharing: NearbySharing? = null
     private var exchangeCount = 0
+    private var runLength = NearbyRunLength.TwoHours
 
     override fun onBind(intent: Intent?): IBinder? = null
 
@@ -68,12 +71,14 @@ class NearbyService : Service() {
             return START_NOT_STICKY
         }
         if (sharing != null) return START_NOT_STICKY
+        val store = RoomStore.shared(applicationContext)
+        runLength = store.nearbyRunLength()
+        NearbyState.runLength.value = runLength
         createChannel()
         ServiceCompat.startForeground(
             this, NOTIFICATION_ID, notification("Looking for nearby Freegram phones"),
             if (Build.VERSION.SDK_INT >= 29) ServiceInfo.FOREGROUND_SERVICE_TYPE_CONNECTED_DEVICE else 0,
         )
-        val store = RoomStore.shared(applicationContext)
         sharing = NearbySharing(applicationContext, store, MediaStore.shared(applicationContext), scope, object : NearbySharing.Listener {
             override fun onStatus(text: String) { NearbyState.status.value = text }
             override fun onExchange(peer: String, report: ExchangeReport) {
@@ -91,10 +96,12 @@ class NearbyService : Service() {
             sharing?.start()
             NearbyState.running.value = true
         }
-        scope.launch {
-            delay(MAX_RUN_MS)
-            NearbyState.status.value = "Nearby sharing stopped after 2 hours to save battery"
-            stopSelf()
+        runLength.durationMs?.let { duration ->
+            scope.launch {
+                delay(duration)
+                NearbyState.status.value = "Nearby sharing stopped after ${runLength.label} to save battery"
+                stopSelf()
+            }
         }
         return START_NOT_STICKY
     }
@@ -116,7 +123,8 @@ class NearbyService : Service() {
     private fun notification(text: String) = NotificationCompat.Builder(this, CHANNEL)
         .setSmallIcon(R.drawable.ic_nearby)
         .setContentTitle("Freegram nearby sharing")
-        .setContentText(text)
+        .setContentText("$text. Runs ${runLength.runText}. Longer runs use more battery.")
+        .setStyle(NotificationCompat.BigTextStyle().bigText("$text. Runs ${runLength.runText}. Longer runs use more battery."))
         .setOngoing(true)
         .setOnlyAlertOnce(true)
         .setContentIntent(PendingIntent.getActivity(this, 0, Intent(this, MainActivity::class.java), PendingIntent.FLAG_IMMUTABLE))
@@ -131,7 +139,6 @@ class NearbyService : Service() {
         private const val CHANNEL = "nearby"
         private const val NOTIFICATION_ID = 1
         private const val ACTION_STOP = "org.freegram.app.nearby.STOP"
-        const val MAX_RUN_MS = 2 * 60 * 60 * 1000L
 
         fun start(context: Context) = ContextCompat.startForegroundService(context, Intent(context, NearbyService::class.java))
         fun stop(context: Context) { context.startService(Intent(context, NearbyService::class.java).setAction(ACTION_STOP)) }

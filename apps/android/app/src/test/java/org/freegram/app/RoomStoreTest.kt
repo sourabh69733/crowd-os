@@ -280,12 +280,20 @@ class RoomStoreTest {
     @Test fun nearbySettingsDefaultAndSurviveReopen() {
         val store = RoomStore(context, databaseName)
         assertEquals(12, store.nearbyReach().hops)
+        assertEquals(2 * 3600 * 1000L, store.nearbyRunLength().durationMs)
         for (reach in org.freegram.shared.model.NearbyReach.entries) {
             store.setNearbyReach(reach)
             val reopened = RoomStore(context, databaseName)
             assertEquals(reach, reopened.nearbyReach())
             reopened.close()
         }
+        for (length in org.freegram.shared.model.NearbyRunLength.entries) {
+            store.setNearbyRunLength(length)
+            val reopened = RoomStore(context, databaseName)
+            assertEquals(length, reopened.nearbyRunLength())
+            reopened.close()
+        }
+        assertNull(store.nearbyRunLength().durationMs)
         store.close()
     }
 

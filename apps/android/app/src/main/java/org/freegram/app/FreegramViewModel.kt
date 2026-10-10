@@ -63,6 +63,7 @@ import org.freegram.shared.model.StorageUi
 import org.freegram.shared.model.NearbyActivity
 import org.freegram.shared.model.NearbyUi
 import org.freegram.shared.model.NearbyReach
+import org.freegram.shared.model.NearbyRunLength
 import org.freegram.shared.model.PhotoUi
 import org.freegram.shared.model.PostSource
 import org.freegram.shared.model.PostUi
@@ -118,10 +119,17 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
     var autoBridge by mutableStateOf(store.autoBridge()); private set
     override var nearbyReach by mutableStateOf(store.nearbyReach()); private set
+    override var nearbyRunLength by mutableStateOf(store.nearbyRunLength()); private set
+    private var activeRunLength by mutableStateOf(NearbyState.runLength.value)
 
     override fun changeNearbyReach(reach: NearbyReach) {
         store.setNearbyReach(reach)
         nearbyReach = reach
+    }
+
+    override fun changeNearbyRunLength(length: NearbyRunLength) {
+        store.setNearbyRunLength(length)
+        nearbyRunLength = length
     }
 
     // Moderation
@@ -167,7 +175,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private var nearbyActivity by mutableStateOf<List<Pair<String, Long>>>(emptyList())
     override val nearby: NearbyUi get() = NearbyUi(
         nearbyRunning, nearbyStatus, nearbyCounts.first, nearbyCounts.second, nearbyCounts.third,
-        nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge,
+        nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge, if (nearbyRunning) activeRunLength else nearbyRunLength,
     )
     private var photoBytes by mutableStateOf(0L)
 
@@ -1092,6 +1100,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     private fun observeNearby() {
         viewModelScope.launch { NearbyState.running.collect { nearbyRunning = it } }
+        viewModelScope.launch { NearbyState.runLength.collect { activeRunLength = it } }
         viewModelScope.launch { NearbyState.status.collect { nearbyStatus = it } }
         viewModelScope.launch { NearbyState.log.collect { nearbyLog = it } }
         viewModelScope.launch { NearbyState.activity.collect { nearbyActivity = it } }

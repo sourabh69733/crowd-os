@@ -49,6 +49,12 @@ enum class NearbyReach(val label: String, val hops: Int) {
     Short("Short", 6), Medium("Medium", 12), Far("Far", 20),
 }
 
+enum class NearbyRunLength(val label: String, val durationMs: Long?, val runText: String) {
+    TwoHours("2 hours", 2 * 3600 * 1000L, "for up to 2 hours"),
+    SixHours("6 hours", 6 * 3600 * 1000L, "for up to 6 hours"),
+    UntilStopped("Until I stop it", null, "until you stop it"),
+}
+
 data class NearbyUi(
     val running: Boolean,
     val status: String,
@@ -57,6 +63,7 @@ data class NearbyUi(
     val postsPassed: Int,
     val activity: List<NearbyActivity>,
     val autoPublish: Boolean,
+    val runLength: NearbyRunLength,
 )
 
 data class MeUi(val label: String, val name: String, val npub: String, val tag: String, val hue: Float, val backupDone: Boolean)
@@ -99,7 +106,9 @@ interface SettingsUi {
     val storageInfo: StorageUi
     val relayUrls: List<String>
     val nearbyReach: NearbyReach
+    val nearbyRunLength: NearbyRunLength
     fun changeNearbyReach(reach: NearbyReach)
+    fun changeNearbyRunLength(length: NearbyRunLength)
     /** The plain secret key while the user has chosen to show it; null otherwise. */
     val plainKey: String?
 

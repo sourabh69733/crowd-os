@@ -9,6 +9,7 @@ import org.freegram.app.protocol.BulletinEvent
 import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.Replies
 import org.freegram.shared.model.NearbyReach
+import org.freegram.shared.model.NearbyRunLength
 import org.freegram.app.moderation.HideList
 import org.freegram.app.relay.RetryPolicy
 import org.json.JSONArray
@@ -81,6 +82,9 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
 
     fun nearbyReach(): NearbyReach = NearbyReach.entries.firstOrNull { it.name == prefs.getString("nearby_reach", null) } ?: NearbyReach.Medium
     fun setNearbyReach(reach: NearbyReach) { check(prefs.edit().putString("nearby_reach", reach.name).commit()) }
+
+    fun nearbyRunLength(): NearbyRunLength = NearbyRunLength.entries.firstOrNull { it.name == prefs.getString("nearby_run_length", null) } ?: NearbyRunLength.TwoHours
+    fun setNearbyRunLength(length: NearbyRunLength) { check(prefs.edit().putString("nearby_run_length", length.name).commit()) }
 
     /** Carry eligible Discover posts without adding relay deliveries or server-fetched replies. */
     suspend fun saveDiscoverEvents(events: List<BulletinEvent>) = database.withTransaction {

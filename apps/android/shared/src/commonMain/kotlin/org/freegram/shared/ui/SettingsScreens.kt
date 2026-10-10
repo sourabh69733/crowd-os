@@ -48,6 +48,7 @@ import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
 import org.freegram.shared.model.NearbyReach
+import org.freegram.shared.model.NearbyRunLength
 import androidx.compose.material3.RadioButton
 
 enum class SettingsDest(val title: String) {
@@ -76,7 +77,7 @@ fun SettingsScreen(ui: FreegramUi, platform: PlatformActions, extraPages: List<S
             ListRow("Maintainers", "${ui.maintainerList.count { it.enabled }} active · ${s.hiddenByMaintainers} posts hidden") { dest = SettingsDest.Maintainers }
         }
         ListBox {
-            ListRow("Nearby", "${ui.nearbyReach.label} reach") { dest = SettingsDest.Nearby }
+            ListRow("Nearby", "${ui.nearbyReach.label} reach · ${ui.nearbyRunLength.label}") { dest = SettingsDest.Nearby }
             ListRow("Servers", "${ui.relayUrls.size} servers") { dest = SettingsDest.Servers }
             ListRow("Storage", "${s.posts} of ${s.maxPosts} posts · ${mb(s.photoBytes)} of ${mb(s.maxPhotoBytes)} photos") { dest = SettingsDest.Storage }
         }
@@ -353,6 +354,16 @@ private fun NearbySettingsPage(ui: FreegramUi) {
             }
         }
         Hint("Each phone applies its own limit when passing on or receiving posts.")
+    }
+    Card {
+        Text("How long Nearby runs", color = Fg.colors.ink, fontWeight = FontWeight.SemiBold)
+        NearbyRunLength.entries.forEach { length ->
+            Row(Modifier.fillMaxWidth().clickable { ui.changeNearbyRunLength(length) }, verticalAlignment = Alignment.CenterVertically) {
+                RadioButton(selected = ui.nearbyRunLength == length, onClick = { ui.changeNearbyRunLength(length) })
+                Text(length.label, color = Fg.colors.ink)
+            }
+        }
+        Hint("Longer runs use more battery. Changes apply the next time you start Nearby.")
     }
 }
 

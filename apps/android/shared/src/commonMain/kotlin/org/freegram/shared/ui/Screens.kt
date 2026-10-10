@@ -284,8 +284,9 @@ fun NearbyScreen(ui: FreegramUi, platform: PlatformActions) {
                 Text(if (n.running) "Sharing" else "Off", fontWeight = FontWeight.Bold, color = if (n.running) Color(0xFF1F1603) else c.ink2)
             }
         }
-        Text(if (n.running) "Swapping public posts with Freegram phones around you. Keeps going in the background for up to 2 hours."
-        else "Tap to share public posts with Freegram phones around you, without internet.",
+        Text((if (n.running) "Swapping public posts with Freegram phones around you. "
+        else "Tap to share public posts with Freegram phones around you, without internet. ") +
+            "Runs in the background ${n.runLength.runText}. Longer runs use more battery.",
             color = c.ink2, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
         if (n.status.isNotBlank()) Hint(n.status, Modifier.fillMaxWidth(), TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
