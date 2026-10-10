@@ -27,16 +27,16 @@ When two phones meet:
 sequenceDiagram
   participant A as Phone A
   participant B as Phone B
-  Note over A,B: Bluetooth, cluster mode (always on while sharing)
+  Note over A,B: Nearby cluster mode (paused briefly for media)
   A->>B: Find each other
   A->>B: Swap lists of post IDs
   A->>B: Send missing text posts first
   A->>B: List missing photos and video pieces
   Note over A,B: Direct Wi-Fi, point-to-point (only when media is waiting)
-  A->>B: Open Wi-Fi link
+  A->>B: Pause cluster, open point-to-point link
   A->>B: Photos, then video pieces
   B->>A: Each piece checked by fingerprint, then stored
-  A->>B: Close Wi-Fi, back to Bluetooth
+  A->>B: Close media link, resume cluster
   Note over A,B: Later, any phone with signal uploads posts and media
 ```
 
@@ -46,10 +46,10 @@ Priority on every meeting: **text first, then photos, then videos**, so urgent n
 
 ### 1. Fast Wi-Fi mode for media
 
-- **What:** photos (and later videos) move over direct phone-to-phone Wi-Fi instead of Bluetooth: about 5 to 30 MB/s instead of 0.1 to 0.3 MB/s.
-- **How:** keep Nearby's cluster mode (Bluetooth) for finding phones and swapping text. When the photo round finds something to send, open a second Nearby connection in point-to-point mode, which Nearby upgrades to Wi-Fi Direct or a local hotspot. Send media as Nearby file payloads, then close the link.
+- **What:** photos (and later videos) use Nearby's high-throughput point-to-point mode when available. The radio and speed depend on the phones; measure them on the two-phone trial.
+- **How:** use cluster mode for finding phones and swapping text. After text and photo inventories, pause this phone's cluster operations when both peers support fast media and a photo is waiting. Reconnect the selected pair in point-to-point mode, transfer checked FILE payloads, then resume cluster. Google Nearby rejects simultaneous strategies. Older phones keep the existing photo-chunk exchange.
 - **Wi-Fi prompt:** Android doesn't let apps switch Wi-Fi on. When Nearby starts with Wi-Fi off, show "Turn on Wi-Fi for faster photos and videos" with a button that opens Android's Wi-Fi panel.
-- **Effort:** about 1 week. Test on your 2 phones.
+- **Status:** implemented for photos in 0.6.0; unit tests and release build are recorded in STATUS_LOG.md. Speed, reconnect behaviour and battery still need your two-phone trial.
 
 ### 2. Media servers (photos over the internet)
 
@@ -88,14 +88,14 @@ Priority on every meeting: **text first, then photos, then videos**, so urgent n
 
 ## Protocol changes
 
-- The nearby exchange becomes **version 2**: new frames for the Wi-Fi upgrade, media pieces and video manifests, plus names, hide lists and likes. Phones still speak version 1 to older phones, which then swap text and photos as today.
+- Fast photo handoff uses a negotiated `fast: 2` capability on the existing version-1 HELLO, with new readiness and file-control frames only between capable phones. Older phones still swap text and photo chunks. Frames for video pieces/manifests, names, hide lists and likes remain future work.
 - Hop and age limits remain transport rules outside the signed post. A dishonest phone can still fake its hop count; limits protect honest phones.
 - [protocol/README.md](../../protocol/README.md) gets the new frames and test vectors before release.
 
 ## Risks and limits
 
 - **Battery:** the Wi-Fi link opens only while media is waiting, and closes after.
-- **One fast link at a time:** most phones hold one Wi-Fi Direct link at a time, so media goes pair by pair; text keeps spreading through the whole crowd.
+- **One fast link at a time:** most phones hold one Wi-Fi Direct link at a time, so media goes pair by pair; this phone pauses cluster sharing during its media window; other phones can keep sharing text.
 - **Storage:** videos fill phones fast; limits and cleanup matter.
 - **Moderation:** videos are harder to check. Hidden posts' media isn't passed on or uploaded; maintainers can hide by file fingerprint.
 - **Play policy:** none of this needs new sensitive permissions. Nearby Wi-Fi uses `NEARBY_WIFI_DEVICES`, which the app already has.

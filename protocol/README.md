@@ -31,3 +31,30 @@ A post's photo is a NIP-92 `imeta` tag with no URL: `["imeta","x <sha256>","m im
 | `["BLOB", sha, size]` then `["CHUNK", sha, index, base64]`… | One photo at a time; chunks in order, at most 16 KiB of data each (frame at most 24 KiB). |
 | `["BLOBSENT"]` | No more photos from this side. |
 | `["BLOBACK", sha]` / `["BLOBNACK", sha, reason]` | `BLOBACK` only after the bytes hash to `sha`, match the post's size, decode as a JPEG within limits, and are stored. |
+
+### Fast media handoff (capability `{"media":1,"fast":2}`)
+
+HELLO remains version 1. The optional `fast: 2` capability enables the new handoff only when both phones advertise it; older phones keep the existing CHUNK round. This capability does not claim which radio Nearby selects or a measured speed.
+
+After the text ACK/SENT round and BLOBHAVE/BLOBWANT inventories:
+
+| Frame | Rule |
+|---|---|
+| `["MEDIAREADY", token]` | A fresh random 64-character lowercase hex token reserves this phone's single media window. An empty string declines and both phones use CHUNK instead. No new frames are sent to peers without `fast: 2`. |
+| `["MEDIAGO", session]` | Both sides confirm SHA-256 of their tokens sorted lexicographically and concatenated as UTF-8. Equal tokens or mismatched sessions stop the exchange. |
+
+On mutual readiness, finish/drain other cluster exchanges for up to 15 seconds, stop cluster advertising, discovery and endpoints, then reconnect using `P2P_POINT_TO_POINT` with service ID `org.freegram.media.v2`. The smaller token advertises; the larger token discovers. Only the agreed peer token is accepted. Both sides repeat MEDIAGO on the new connection before enabling files. Reconnection is bounded to 30 seconds. Cluster sharing resumes after the media window unless stopped by the user or run-length deadline. A failed handoff retries at a later meeting.
+
+The smaller-token phone sends its requested photos first, then directions reverse:
+
+| Frame/payload | Rule |
+|---|---|
+| `["FILE", payloadId, sha256, size]` | One file at a time; a unique Nearby payload ID and a hash requested in this exchange, at most 1 MiB. |
+| `["FILEREADY", payloadId]` or BLOBNACK | The receiver registers the expected file before granting permission. Unrequested, hidden or mismatched photos are declined. |
+| Nearby FILE payload | Send only after FILEREADY. FILE arrival and transfer-success callbacks may arrive in either order. Unexpected or oversized payloads are cancelled and the peer disconnected. |
+| BLOBACK / BLOBNACK | ACK only after transfer success, exact size, SHA-256, JPEG and signed dimensions checks, current moderation checks and durable storage. |
+| BLOBSENT | This direction has no more photos. |
+
+Keep the existing limit of 8 requested photos per side and 1600 pixels per side. Each file is bounded to 120 seconds and the whole media window to 5 minutes. Temporary files and descriptors are removed on failure, timeout, disconnect or Stop. Transport success alone is not a storage acknowledgement. Signed events and their hop counts are not edited by this handoff.
+
+The v1 CHUNK path sends and receives concurrently, with one outgoing photo waiting for its storage acknowledgement before the next starts. This avoids filling bounded input buffers when both phones have photos. Its frame format is unchanged.

@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.5.0**.
+One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.6.0**.
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -72,7 +72,9 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] One photo per post, resized, location removed
 - [x] Photos swap nearby by fingerprint
 - [ ] Photo sent between two real phones
-- [ ] Fast Wi-Fi mode for media ([plan, feature 1](OFFLINE_MEDIA_PLAN.md#1-fast-wi-fi-mode-for-media))
+- [x] Fast photo handoff: text first, brief cluster pause, requested FILE transfer, v1 fallback
+- [x] Wi-Fi-off hint and Android settings button
+- [ ] Test fast media on two phones: reconnect, Wi-Fi off, interrupted transfers, Stop, throughput and battery ([plan, feature 1](OFFLINE_MEDIA_PLAN.md#1-fast-wi-fi-mode-for-media))
 - [ ] Media servers so photos reach the internet ([feature 2](OFFLINE_MEDIA_PLAN.md#2-media-servers-photos-over-the-internet)); needs your Cloudflare R2 bucket
 - [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos))
 - [ ] "Send to a nearby phone" for big files ([feature 4](OFFLINE_MEDIA_PLAN.md#4-send-to-a-nearby-phone-big-files-on-purpose))
@@ -156,6 +158,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 8 Oct | Play signs with your own key (not Google-generated), so the website APK keeps working if Play drops the app. |
 | 8 Oct | Target audience 18+. Support email sourabhsahu69733@gmail.com. |
 | 9 Oct | APK distributed from freegram.in now, alongside the Play closed test. All work on `main`. |
+| 10 Oct 2026 | Fast photos pause cluster sharing for a bounded point-to-point media window because Nearby allows one active strategy. Older peers use v1 chunks. No measured speed or specific-radio claim until device testing. |
 | 10 Oct 2026 | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
 
@@ -164,7 +167,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 1. **You:** screenshots, finish the Play forms, upload 0.4.1 to closed testing, invite 15 to 20 testers.
 2. **You:** back up the release key; test 0.4.1 on your phones (replies, likes, terms, Back gesture).
 3. **You:** test 0.5.0 reach settings, carried Discover posts and longer Nearby on your phones.
-4. **Me:** fast Wi-Fi mode for photos, then media servers (needs your R2 bucket), then videos.
+4. **Me:** media servers on Cloudflare R2, then resumable videos and direct sharing. Fast photo handoff is built; phone testing remains open.
 5. **You:** answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
 ## Not planned yet
