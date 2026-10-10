@@ -58,3 +58,7 @@ The smaller-token phone sends its requested photos first, then directions revers
 Keep the existing limit of 8 requested photos per side and 1600 pixels per side. Each file is bounded to 120 seconds and the whole media window to 5 minutes. Temporary files and descriptors are removed on failure, timeout, disconnect or Stop. Transport success alone is not a storage acknowledgement. Signed events and their hop counts are not edited by this handoff.
 
 The v1 CHUNK path sends and receives concurrently, with one outgoing photo waiting for its storage acknowledgement before the next starts. This avoids filling bounded input buffers when both phones have photos. Its frame format is unchanged.
+
+### Online photo URLs
+
+New photo posts can include `url https://media.freegram.in/<sha256>.jpg` in their signed `imeta` tag. The URL is included before the author signs. Carriers keep the original event unchanged and sign a separate, short-lived Blossom kind-24242 upload authorization scoped to the server and photo hash. URL-free posts remain valid and Freegram can fetch their photos by hash. Downloaded bytes must match the signed hash, size and image dimensions before storage. Nearby frames and signature verification are unchanged.

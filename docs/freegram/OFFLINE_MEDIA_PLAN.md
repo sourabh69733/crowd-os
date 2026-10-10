@@ -55,8 +55,8 @@ Priority on every meeting: **text first, then photos, then videos**, so urgent n
 
 - **What:** photos (and later videos) reach people online, not only phones nearby.
 - **How:** Blossom servers (the Nostr media standard): files stored by their SHA-256 fingerprint, on Cloudflare R2 (free up to 10 GB, then cheap; no download fees). The post's `imeta` tag gains a `url`. Phones upload when online; carriers upload media they received nearby, like they publish posts.
-- **Needs from you:** a Cloudflare R2 bucket and an API token.
-- **Open questions:** file size limits, how long files are kept, and how hidden or illegal files are removed (see [PRINCIPLES.md](PRINCIPLES.md)).
+- **Status:** R2 bucket and Blossom Worker deployed at `media.freegram.in` on 10 October. Android photo upload/download integration is being verified. Cloud credentials stay outside the app.
+- **Pilot limits:** JPEG photos up to 1 MiB and 1600 pixels, 100 new hashes per uploading key, 1 GiB total reserved storage. Signed uploads are required. Files remain until maintainer action; blocked hashes deny uploads and downloads. Production retention, deletion and moderation workflow remain open (see [PRINCIPLES.md](PRINCIPLES.md)).
 - **Effort:** about 1 week.
 
 ### 3. Videos

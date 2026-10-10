@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.6.0**.
+One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.6.1**.
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -19,7 +19,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 2. Reliability and safety | Nothing lost, no false "sent", abuse limits | ✅ |
 | 3. Nearby sharing | Phone to phone without internet | 🟡 first 2-phone test passed |
 | 4. Offline to internet | Carried posts reach servers once online | 🟡 |
-| 5. Photos and videos | Media | 🟡 photos nearby only; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
+| 5. Photos and videos | Media | 🟡 photos nearby and online; videos pending; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
 | Moderation | Maintainers, reports, appeals | 🟡 you are the default maintainer |
 | New UI | Screens from the approved mockup | ✅ |
 | Discover | Find people and posts | 🟡 |
@@ -75,7 +75,9 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] Fast photo handoff: text first, brief cluster pause, requested FILE transfer, v1 fallback
 - [x] Wi-Fi-off hint and Android settings button
 - [ ] Test fast media on two phones: reconnect, Wi-Fi off, interrupted transfers, Stop, throughput and battery ([plan, feature 1](OFFLINE_MEDIA_PLAN.md#1-fast-wi-fi-mode-for-media))
-- [ ] Media servers so photos reach the internet ([feature 2](OFFLINE_MEDIA_PLAN.md#2-media-servers-photos-over-the-internet)); needs your Cloudflare R2 bucket
+- [x] Blossom photo server on Cloudflare R2 at `media.freegram.in`, scoped signed uploads and checked downloads
+- [x] Android carrier uploads, persistent rotating retries and photo completion updates
+- [ ] Real-phone online photo upload, download and carrier reconnect test
 - [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos))
 - [ ] "Send to a nearby phone" for big files ([feature 4](OFFLINE_MEDIA_PLAN.md#4-send-to-a-nearby-phone-big-files-on-purpose))
 
@@ -162,12 +164,14 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 10 Oct 2026 | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
 
+| 10 October 2026 | Media server pilot deployed at media.freegram.in. Signed JPEG uploads, 1 MiB photos, 1600 px dimensions, 100 new hashes per key and 1 GiB reserved cap. URLs are included before post signing; carriers never edit signed posts. Android attempts eight hashes per pass with persistent rotation and receipts. Downloads trigger UI refresh. Production retention/deletion and physical-phone end-to-end checks remain open. |
+
 ## Next up
 
 1. **You:** screenshots, finish the Play forms, upload 0.4.1 to closed testing, invite 15 to 20 testers.
 2. **You:** back up the release key; test 0.4.1 on your phones (replies, likes, terms, Back gesture).
 3. **You:** test 0.5.0 reach settings, carried Discover posts and longer Nearby on your phones.
-4. **Me:** media servers on Cloudflare R2, then resumable videos and direct sharing. Fast photo handoff is built; phone testing remains open.
+4. **Me:** resumable videos, direct sharing and offline names, hide lists and likes. Fast photos and the R2 photo server are built; phone testing remains open.
 5. **You:** answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
 ## Not planned yet
