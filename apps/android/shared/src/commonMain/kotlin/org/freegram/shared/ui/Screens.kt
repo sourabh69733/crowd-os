@@ -288,6 +288,10 @@ fun NearbyScreen(ui: FreegramUi, platform: PlatformActions) {
         else "Tap to share public posts with Freegram phones around you, without internet. ") +
             "Runs in the background ${n.runLength.runText}. Longer runs use more battery.",
             color = c.ink2, fontSize = 14.sp, textAlign = TextAlign.Center, modifier = Modifier.fillMaxWidth())
+        if (!n.wifiEnabled) {
+            Hint("Turn on Wi-Fi for faster photos and videos", Modifier.fillMaxWidth(), TextAlign.Center)
+            FgButton("Open Wi-Fi settings", onClick = platform.openWifiSettings)
+        }
         if (n.status.isNotBlank()) Hint(n.status, Modifier.fillMaxWidth(), TextAlign.Center)
         Row(horizontalArrangement = Arrangement.spacedBy(8.dp)) {
             listOf(n.exchanges to "phones met", n.postsReceived to "posts received", n.postsPassed to "posts passed on").forEach { (v, l) ->

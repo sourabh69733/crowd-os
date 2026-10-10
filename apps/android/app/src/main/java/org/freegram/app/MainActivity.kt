@@ -29,6 +29,7 @@ import androidx.compose.runtime.remember
 import androidx.compose.ui.Modifier
 import androidx.compose.ui.platform.LocalContext
 import androidx.compose.ui.unit.dp
+import org.freegram.app.nearby.wifiSettingsIntent
 import org.freegram.app.nearby.nearbyPermissions
 import org.freegram.app.nearby.optionalNearbyPermissions
 import org.freegram.app.protocol.Nip01Protocol
@@ -42,6 +43,11 @@ import com.google.mlkit.vision.codescanner.GmsBarcodeScanning
 
 class MainActivity : ComponentActivity() {
     private val model: FreegramViewModel by viewModels()
+
+    override fun onResume() {
+        super.onResume()
+        model.refreshNearbyRadios()
+    }
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -61,6 +67,7 @@ private fun FreegramHost(model: FreegramViewModel) {
         PlatformActions(
             pickPhoto = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             startNearby = { permissions.launch(nearbyPermissions() + optionalNearbyPermissions()) },
+            openWifiSettings = { context.startActivity(wifiSettingsIntent()) },
             copyText = { label, text ->
                 val clip = ClipData.newPlainText(label, text)
                 // Keep backup codes out of the clipboard preview and keyboard suggestions.

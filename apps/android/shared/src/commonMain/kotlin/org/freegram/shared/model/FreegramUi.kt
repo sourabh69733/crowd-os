@@ -64,6 +64,7 @@ data class NearbyUi(
     val activity: List<NearbyActivity>,
     val autoPublish: Boolean,
     val runLength: NearbyRunLength,
+    val wifiEnabled: Boolean,
 )
 
 data class MeUi(val label: String, val name: String, val npub: String, val tag: String, val hue: Float, val backupDone: Boolean)
@@ -201,6 +202,7 @@ interface FreegramUi : SettingsUi {
 class PlatformActions(
     val pickPhoto: () -> Unit,
     val startNearby: () -> Unit,
+    val openWifiSettings: () -> Unit,
     val copyText: (label: String, text: String) -> Unit,
     /** Opens the camera code scanner; a scanned Freegram ID is followed. */
     val scanToFollow: () -> Unit,

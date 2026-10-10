@@ -61,6 +61,7 @@ import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PersonUi
 import org.freegram.shared.model.StorageUi
 import org.freegram.shared.model.NearbyActivity
+import org.freegram.app.nearby.isWifiEnabled
 import org.freegram.shared.model.NearbyUi
 import org.freegram.shared.model.NearbyReach
 import org.freegram.shared.model.NearbyRunLength
@@ -118,6 +119,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     var nearbyStatus by mutableStateOf(""); private set
     var nearbyLog by mutableStateOf<List<String>>(emptyList()); private set
     var autoBridge by mutableStateOf(store.autoBridge()); private set
+    private var nearbyWifiEnabled by mutableStateOf(isWifiEnabled(application))
+    fun refreshNearbyRadios() { nearbyWifiEnabled = isWifiEnabled(getApplication()) }
     override var nearbyReach by mutableStateOf(store.nearbyReach()); private set
     override var nearbyRunLength by mutableStateOf(store.nearbyRunLength()); private set
     private var activeRunLength by mutableStateOf(NearbyState.runLength.value)
@@ -175,7 +178,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private var nearbyActivity by mutableStateOf<List<Pair<String, Long>>>(emptyList())
     override val nearby: NearbyUi get() = NearbyUi(
         nearbyRunning, nearbyStatus, nearbyCounts.first, nearbyCounts.second, nearbyCounts.third,
-        nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge, if (nearbyRunning) activeRunLength else nearbyRunLength,
+        nearbyActivity.map { (text, at) -> NearbyActivity(text, ago(at / 1000)) }, autoBridge, if (nearbyRunning) activeRunLength else nearbyRunLength, nearbyWifiEnabled,
     )
     private var photoBytes by mutableStateOf(0L)
 
@@ -1082,6 +1085,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     fun cancelConfirm() { confirmingRestore = false; confirmingReplace = false }
 
     fun startNearby() {
+        refreshNearbyRadios()
         if (!hasPlayServices(getApplication())) {
             nearbyStatus = "Nearby sharing needs Google Play services, which this phone does not have."
             return
