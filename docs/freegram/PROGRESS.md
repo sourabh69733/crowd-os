@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 10 October 2026. All work is on `main`. Latest app version: **0.6.1**.
+One page to see where Freegram stands. Updated 11 October 2026. All work is on `main`. Latest app version: **0.6.1** (website still offers 0.4.1).
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -19,13 +19,14 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 2. Reliability and safety | Nothing lost, no false "sent", abuse limits | ✅ |
 | 3. Nearby sharing | Phone to phone without internet | 🟡 first 2-phone test passed |
 | 4. Offline to internet | Carried posts reach servers once online | 🟡 |
-| 5. Photos and videos | Media | 🟡 photos nearby and online; videos pending; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
+| 5. Photos and videos | Media | 🟡 photos nearby and online; videos in progress; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
 | Moderation | Maintainers, reports, appeals | 🟡 you are the default maintainer |
 | New UI | Screens from the approved mockup | ✅ |
 | Discover | Find people and posts | 🟡 |
 | Replies and likes | Answer and react to posts | 🟡 |
 | Safety for protests | Panic wipe, delete account, optional app lock | 🟡 |
-| Website | freegram.in with APK download | ✅ live with 0.4.1 |
+| Website | freegram.in with APK download | 🟡 live, but offers 0.4.1; needs 0.6.1 |
+| Media server | media.freegram.in for photos | 🟡 live; needs upload limits and privacy update |
 | Google Play | Public listing | 🟡 key uploaded, forms in progress, closed test next |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
@@ -77,8 +78,10 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] Test fast media on two phones: reconnect, Wi-Fi off, interrupted transfers, Stop, throughput and battery ([plan, feature 1](OFFLINE_MEDIA_PLAN.md#1-fast-wi-fi-mode-for-media))
 - [x] Blossom photo server on Cloudflare R2 at `media.freegram.in`, scoped signed uploads and checked downloads
 - [x] Android carrier uploads, persistent rotating retries and photo completion updates
+- [ ] Media server limits: uploads are open to any signed key (`UPLOAD_KEYS: "*"`), so new keys can fill the 1 GB cap; add a daily limit or approved keys
+- [ ] Media server deletion and moderation workflow (today only `BLOCKED_HASHES`)
 - [ ] Real-phone online photo upload, download and carrier reconnect test
-- [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos))
+- [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos)). Started: video shrinking with metadata removal (Media3), video store and signed manifest of pieces, with tests; not yet in posts, Nearby or the server
 - [ ] "Send to a nearby phone" for big files ([feature 4](OFFLINE_MEDIA_PLAN.md#4-send-to-a-nearby-phone-big-files-on-purpose))
 
 ### Moderation 🟡
@@ -114,6 +117,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 
 ### Website ✅
 - [x] freegram.in: what it is, how it works, features, download APK 0.4.1 with checksums, privacy and terms pages (9 October)
+- [ ] Put 0.6.1 (or the next release) on the site with new checksums
 - [ ] Fix automatic Cloudflare builds (today deployed by hand with `npx wrangler deploy`)
 - [ ] Self-updating website build ("Update available" banner)
 
@@ -122,7 +126,8 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] Developer account; own signing key uploaded (8 October), so Play and website builds update each other
 - [x] Icon and feature graphic ([play/graphics](play/graphics))
 - [ ] Screenshots from your phone
-- [ ] Finish App content forms; upload 0.4.1 to closed testing
+- [ ] Update privacy policy and data safety: photos now go to our own server (media.freegram.in), which also sees internet addresses
+- [ ] Finish App content forms; upload the latest version (0.6.1 or newer) to closed testing
 - [ ] 12+ testers for 14 days, then apply for production
 
 ### Release keys ✅
@@ -160,19 +165,18 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 8 Oct | Play signs with your own key (not Google-generated), so the website APK keeps working if Play drops the app. |
 | 8 Oct | Target audience 18+. Support email sourabhsahu69733@gmail.com. |
 | 9 Oct | APK distributed from freegram.in now, alongside the Play closed test. All work on `main`. |
-| 10 Oct 2026 | Fast photos pause cluster sharing for a bounded point-to-point media window because Nearby allows one active strategy. Older peers use v1 chunks. No measured speed or specific-radio claim until device testing. |
-| 10 Oct 2026 | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
+| 10 Oct | Fast photos pause cluster sharing for a bounded point-to-point media window because Nearby allows one active strategy. Older peers use v1 chunks. No measured speed or specific-radio claim until device testing. |
+| 10 Oct | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
-
-| 10 October 2026 | Media server pilot deployed at media.freegram.in. Signed JPEG uploads, 1 MiB photos, 1600 px dimensions, 100 new hashes per key and 1 GiB reserved cap. URLs are included before post signing; carriers never edit signed posts. Android attempts eight hashes per pass with persistent rotation and receipts. Downloads trigger UI refresh. Production retention/deletion and physical-phone end-to-end checks remain open. |
+| 10 Oct | Media server pilot deployed at media.freegram.in. Signed JPEG uploads, 1 MiB photos, 1600 px dimensions, 100 new hashes per key and 1 GiB reserved cap. URLs are included before post signing; carriers never edit signed posts. Android attempts eight hashes per pass with persistent rotation and receipts. Downloads trigger UI refresh. Production retention/deletion and physical-phone end-to-end checks remain open. |
 
 ## Next up
 
-1. **You:** screenshots, finish the Play forms, upload 0.4.1 to closed testing, invite 15 to 20 testers.
-2. **You:** back up the release key; test 0.4.1 on your phones (replies, likes, terms, Back gesture).
-3. **You:** test 0.5.0 reach settings, carried Discover posts and longer Nearby on your phones.
-4. **Me:** resumable videos, direct sharing and offline names, hide lists and likes. Fast photos and the R2 photo server are built; phone testing remains open.
-5. **You:** answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
+1. **Me:** media server upload limits; privacy policy and data safety updated for media.freegram.in.
+2. **Me:** finish videos (into posts, Nearby pieces, server), then "Send to a nearby phone".
+3. **You:** test 0.6.1 on your phones: reach settings, carried Discover posts, longer Nearby, fast photos, online photos.
+4. **You:** put 0.6.1 on freegram.in; screenshots; finish the Play forms; upload to closed testing; invite 15 to 20 testers.
+5. **You:** back up the release key; answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
 ## Not planned yet
 
