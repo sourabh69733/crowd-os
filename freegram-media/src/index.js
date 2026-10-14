@@ -126,13 +126,21 @@ export class Uploads {
         if (reserved !== undefined && reserved !== bytes.byteLength) return error(400, 'Wrong reserved size');
         if (reserved === undefined) {
           const total = await this.ctx.storage.get('total') || 0;
-          const author = 'author:' + request.headers.get('X-Upload-Key');
+          const key = request.headers.get('X-Upload-Key');
+          const author = 'author:' + key, authorBytes = 'bytes:' + key;
+          const day = 'day:' + new Date().toISOString().slice(0, 10);
           const count = await this.ctx.storage.get(author) || 0;
+          const used = await this.ctx.storage.get(authorBytes) || 0;
+          const today = await this.ctx.storage.get(day) || 0;
           if (count >= 100) return error(429, 'Pilot upload limit reached');
+          // Keys are free to make, so the daily cap is what bounds how fast storage can be filled.
+          if (used + bytes.byteLength > limit(this.env.MAX_BYTES_PER_KEY, 50 * 1024 * 1024)) return error(429, 'Upload limit for this ID reached');
+          if (today + bytes.byteLength > limit(this.env.MAX_BYTES_PER_DAY, 200 * 1024 * 1024)) return error(429, 'Daily upload limit reached; try again tomorrow');
           const cap = Number(this.env.MAX_STORAGE_BYTES);
           if (!Number.isSafeInteger(cap) || cap < 1 || total + bytes.byteLength > cap) return error(507, 'Pilot media storage is full');
-          // Reserve before writing R2. A crash can overcount but cannot bypass the cap.
-          await this.ctx.storage.put({ [hash]: bytes.byteLength, total: total + bytes.byteLength, [author]: count + 1 });
+          // Reserve before writing R2. A crash can overcount but cannot bypass the caps.
+          await this.ctx.storage.put({ [hash]: bytes.byteLength, total: total + bytes.byteLength, [author]: count + 1,
+            [authorBytes]: used + bytes.byteLength, [day]: today + bytes.byteLength });
         }
         await this.env.MEDIA.put(hash, bytes, { httpMetadata: { contentType: request.headers.get('X-Mime') }, customMetadata: { uploaded: String(Math.floor(Date.now()/1000)), uploader: request.headers.get('X-Upload-Key') } });
       }
@@ -142,6 +150,8 @@ export class Uploads {
   }
 }
 
+/** A positive byte limit from configuration, or [fallback] when unset or invalid. */
+function limit(value, fallback) { const n = Number(value); return Number.isSafeInteger(n) && n > 0 ? n : fallback; }
 function extension(mime) { return mime === 'video/mp4' ? 'mp4' : mime === 'application/json' ? 'json' : 'jpg'; }
 function validMp4(bytes) {
   const view = new DataView(bytes.buffer, bytes.byteOffset, bytes.byteLength);

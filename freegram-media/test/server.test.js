@@ -117,3 +117,12 @@ test('immutable media ranges return exact bytes and invalid ranges fail', async 
   const invalid = await worker.fetch(new Request(`https://media.freegram.in/${hash}.mp4`,{headers:{Range:`bytes=0-${video.length}`}}),env);
   assert.equal(invalid.status,416);
 });
+
+test('per-key and daily byte limits', async () => {
+  let env = environment(); env.MAX_BYTES_PER_KEY = '1';
+  assert.equal((await upload(env)).status, 429);
+  env = environment(); env.MAX_BYTES_PER_DAY = '1';
+  assert.equal((await upload(env)).status, 429);
+  env = environment();
+  assert.equal((await upload(env)).status, 201);
+});

@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 11 October 2026. All work is on `main`. Latest app version: **0.6.1** (website still offers 0.4.1).
+One page to see where Freegram stands. Updated 14 October 2026. All work is on `main`. Latest app version: **0.6.1** (website still offers 0.4.1).
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -19,14 +19,14 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 2. Reliability and safety | Nothing lost, no false "sent", abuse limits | ✅ |
 | 3. Nearby sharing | Phone to phone without internet | 🟡 first 2-phone test passed |
 | 4. Offline to internet | Carried posts reach servers once online | 🟡 |
-| 5. Photos and videos | Media | 🟡 photos nearby and online; videos in progress; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
+| 5. Photos and videos | Media | 🟡 photos nearby and online; video engine built, no video screens yet; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
 | Moderation | Maintainers, reports, appeals | 🟡 you are the default maintainer |
 | New UI | Screens from the approved mockup | ✅ |
 | Discover | Find people and posts | 🟡 |
 | Replies and likes | Answer and react to posts | 🟡 |
 | Safety for protests | Panic wipe, delete account, optional app lock | 🟡 |
 | Website | freegram.in with APK download | 🟡 live, but offers 0.4.1; needs 0.6.1 |
-| Media server | media.freegram.in for photos | 🟡 live; needs upload limits and privacy update |
+| Media server | media.freegram.in for photos and videos | 🟡 live for photos; limits and video support written, not deployed yet |
 | Google Play | Public listing | 🟡 key uploaded, forms in progress, closed test next |
 | 6. Field pilot | Real users, go or no-go | ⬜ |
 
@@ -78,10 +78,12 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] Test fast media on two phones: reconnect, Wi-Fi off, interrupted transfers, Stop, throughput and battery ([plan, feature 1](OFFLINE_MEDIA_PLAN.md#1-fast-wi-fi-mode-for-media))
 - [x] Blossom photo server on Cloudflare R2 at `media.freegram.in`, scoped signed uploads and checked downloads
 - [x] Android carrier uploads, persistent rotating retries and photo completion updates
-- [ ] Media server limits: uploads are open to any signed key (`UPLOAD_KEYS: "*"`), so new keys can fill the 1 GB cap; add a daily limit or approved keys
+- [x] Media server limits: 50 MB per ID and 200 MB per day for everyone, on top of 100 files per ID and the 1 GB cap (14 Oct; deploy pending)
+- [ ] Deploy the media server update: `npx wrangler deploy --config freegram-media/wrangler.jsonc`
 - [ ] Media server deletion and moderation workflow (today only `BLOCKED_HASHES`)
 - [ ] Real-phone online photo upload, download and carrier reconnect test
-- [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos)). Started: video shrinking with metadata removal (Media3), video store and signed manifest of pieces, with tests; not yet in posts, Nearby or the server
+- [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos)). Engine built (14 Oct): shrinking with metadata removal, signed manifests, pieces over Nearby file links from several phones, resume, retention, server upload and byte-range download, with tests
+- [ ] Video screens: pick a video, post it, show progress, play it
 - [ ] "Send to a nearby phone" for big files ([feature 4](OFFLINE_MEDIA_PLAN.md#4-send-to-a-nearby-phone-big-files-on-purpose))
 
 ### Moderation 🟡
@@ -126,7 +128,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [x] Developer account; own signing key uploaded (8 October), so Play and website builds update each other
 - [x] Icon and feature graphic ([play/graphics](play/graphics))
 - [ ] Screenshots from your phone
-- [ ] Update privacy policy and data safety: photos now go to our own server (media.freegram.in), which also sees internet addresses
+- [x] Privacy policy and data safety updated for media.freegram.in (14 Oct); website copy needs `npx wrangler deploy` from `freegram-site`
 - [ ] Finish App content forms; upload the latest version (0.6.1 or newer) to closed testing
 - [ ] 12+ testers for 14 days, then apply for production
 
@@ -168,14 +170,15 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 10 Oct | Fast photos pause cluster sharing for a bounded point-to-point media window because Nearby allows one active strategy. Older peers use v1 chunks. No measured speed or specific-radio claim until device testing. |
 | 10 Oct | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
+| 14 Oct | Media server upload limits: 50 MB per ID and 200 MB per day in total, because new IDs are free; a flood can pause uploads for the day but can't fill storage. Privacy policy now names our media server. |
 | 10 Oct | Media server pilot deployed at media.freegram.in. Signed JPEG uploads, 1 MiB photos, 1600 px dimensions, 100 new hashes per key and 1 GiB reserved cap. URLs are included before post signing; carriers never edit signed posts. Android attempts eight hashes per pass with persistent rotation and receipts. Downloads trigger UI refresh. Production retention/deletion and physical-phone end-to-end checks remain open. |
 
 ## Next up
 
-1. **Me:** media server upload limits; privacy policy and data safety updated for media.freegram.in.
-2. **Me:** finish videos (into posts, Nearby pieces, server), then "Send to a nearby phone".
-3. **You:** test 0.6.1 on your phones: reach settings, carried Discover posts, longer Nearby, fast photos, online photos.
-4. **You:** put 0.6.1 on freegram.in; screenshots; finish the Play forms; upload to closed testing; invite 15 to 20 testers.
+1. **You:** deploy the media server (`npx wrangler deploy --config freegram-media/wrangler.jsonc`) and the website (`cd freegram-site && npx wrangler deploy`).
+2. **Me:** video screens (pick, post, progress, play), then release 0.7.0 and put it on freegram.in.
+3. **You:** test 0.6.x on your phones: reach settings, carried Discover posts, longer Nearby, fast photos, online photos.
+4. **You:** screenshots; finish the Play forms; upload the latest version to closed testing; invite 15 to 20 testers.
 5. **You:** back up the release key; answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
 ## Not planned yet

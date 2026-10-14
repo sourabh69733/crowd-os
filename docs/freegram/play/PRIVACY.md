@@ -1,12 +1,22 @@
 # Freegram privacy policy
 
-Last updated: 7 October 2026. Contact: sourabhsahu69733@gmail.com
+Last updated: 14 October 2026. Contact: sourabhsahu69733@gmail.com
 
-Freegram is a public notice board app. Posts are shared between phones nearby and through public Nostr servers. This policy explains what the app handles and who can see it. There is no Freegram company server.
+Freegram is a public notice board app. Posts are shared between phones nearby and through public Nostr servers; photos and videos also go through our media server. This policy explains what the app handles and who can see it.
 
 ## What we (the developers) collect
 
-**Nothing.** The app has no analytics, ads, crash reporting or tracking, and sends nothing to us.
+The app has no analytics, ads, crash reporting or tracking.
+
+**Our media server (media.freegram.in)** stores the photos and videos attached to public posts, so people who are online can see them. For each upload it keeps:
+
+- the file itself (public, like the post it belongs to), identified by its fingerprint;
+- the public ID that uploaded it, and when;
+- how much each ID uploaded, to enforce upload limits.
+
+Like any website, the server (run on Cloudflare) sees the internet (IP) address of phones that upload or download media. We don't store those addresses with the files or use them to track anyone. Cloudflare's own privacy policy applies to its logs.
+
+Nothing else is sent to us.
 
 ## What the app keeps on your phone
 
@@ -19,13 +29,13 @@ This stays on your phone. It is not backed up to the cloud or copied to a new ph
 
 Freegram is for **public** posts. Anything you post, reply, like, or set as your name is public:
 
-- **Servers.** Your posts, replies, likes, name, maintainer lists and your public ID are sent to the public Nostr servers set in the app (by default relay.damus.io and nos.lol). These servers are run by independent operators, not by us; they also see your phone's internet (IP) address when you connect. Their own privacy policies apply.
+- **Servers.** Your posts, replies, likes, name, maintainer lists and your public ID are sent to the public Nostr servers set in the app (by default relay.damus.io and nos.lol). Photos and videos go to our media server (see above). These servers are run by independent operators, not by us; they also see your phone's internet (IP) address when you connect. Their own privacy policies apply.
 - **Nearby phones.** When Nearby sharing is on, phones close to you can see that a Freegram phone is nearby and which public posts it has. They never see your secret key. A random name is used for each session.
 - **Anyone.** Public posts can be copied anywhere, including outside Freegram, by anyone who receives them.
 
-## Photos
+## Photos and videos
 
-Photos are resized and their location, camera and time details (EXIF) are removed before posting. The photo itself is public like the post.
+Photos and videos are shrunk and their location, camera and time details are removed before posting. The photo or video itself is public like the post.
 
 ## Reports and appeals
 
@@ -42,6 +52,7 @@ Reports and appeals are encrypted so that only the maintainer you send them to c
 ## Deleting your data
 
 - **Settings → Delete my account** asks the servers to delete your posts, replies, likes and name (most servers honour these requests), then erases everything on the phone.
+- **Media you uploaded:** email us from the address above with your public ID (npub) and we'll remove your photos and videos from our media server. Copies others saved can't be recalled.
 - **Settings → Panic wipe** erases everything on the phone without contacting servers.
 - Copies already on other people's phones, or saved by them, can't be recalled.
 

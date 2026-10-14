@@ -6,5 +6,5 @@
   "r2_buckets": [{ "binding": "MEDIA", "bucket_name": "freegram-media" }],
   "durable_objects": { "bindings": [{ "name": "UPLOADS", "class_name": "Uploads" }] },
   "migrations": [{ "tag": "v1", "new_sqlite_classes": ["Uploads"] }],
-  "vars": { "UPLOAD_KEYS": "*", "MAX_STORAGE_BYTES": "1073741824", "BLOCKED_HASHES": "" }
+  "vars": { "UPLOAD_KEYS": "*", "MAX_STORAGE_BYTES": "1073741824", "MAX_BYTES_PER_KEY": "52428800", "MAX_BYTES_PER_DAY": "209715200", "BLOCKED_HASHES": "" }
 }

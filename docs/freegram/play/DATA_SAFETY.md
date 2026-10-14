@@ -6,14 +6,15 @@ Answers for the forms under Play Console → Policy → App content. Based on th
 
 **Does your app collect or share any of the required user data types?** Yes.
 
-Play counts data that leaves the phone as "collected", even when it goes to independent servers rather than to us. Freegram sends public posts to public Nostr servers, so declare:
+Play counts data that leaves the phone as "collected". Freegram sends public posts to public Nostr servers, and photos and videos to our own media server (media.freegram.in), so declare:
 
 | Data type | Collected | Shared | Optional? | Purpose | Notes |
 |---|---|---|---|---|---|
 | Personal info → Name | Yes | Yes | Optional | App functionality | The display name the user chooses |
 | Personal info → User IDs | Yes | Yes | Required | App functionality | The public key (npub) |
 | Messages → Other in-app messages | Yes | Yes | Optional | App functionality | Public posts, replies and likes; encrypted reports and appeals |
-| Photos and videos → Photos | Yes | Yes | Optional | App functionality | Photos attached to public posts (location removed) |
+| Photos and videos → Photos | Yes | Yes | Optional | App functionality | Photos attached to public posts (location removed), stored on media.freegram.in |
+| Photos and videos → Videos | Yes | Yes | Optional | App functionality | Videos attached to public posts, once video posting ships |
 
 Not collected: location, contacts, phone number, email, financial info, health, app activity analytics, web history, device IDs, crash logs, diagnostics.
 
