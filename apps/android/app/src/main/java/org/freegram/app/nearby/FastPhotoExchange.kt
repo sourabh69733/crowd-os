@@ -17,7 +17,7 @@ interface FilePeerLink : PeerLink {
     suspend fun receiveFile(id: Long): ByteArray
 }
 
-data class FastPhotoReport(val sent: Int, val received: Int, val outcome: String = "Complete")
+data class FastPhotoReport(val sent: Int, val received: Int, val outcome: String = "Complete", val piecesSent: Int = 0, val piecesReceived: Int = 0)
 
 /** Reservation lasts through negotiation and is always released by NearbyExchange. */
 interface FastMediaHandoff {
@@ -53,6 +53,7 @@ class FastPhotoExchange(
                     is NearbyFrame.FileReady -> check(ready.payloadId == id)
                     else -> error("Expected file readiness")
                 }
+                check(eligible(ref)) { "Photo hidden during transfer" }
                 withTimeout(120_000) { link.sendFile(id) }
                 when (val ack = next()) {
                     is NearbyFrame.BlobAck -> { check(ack.sha256 == ref.sha256); sent++ }

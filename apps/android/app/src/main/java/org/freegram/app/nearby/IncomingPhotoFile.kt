@@ -14,7 +14,7 @@ class IncomingPhotoFile {
 
     @Synchronized fun expect(id: Long, size: Int) {
         require(size in 1..PhotoRef.MAX_BYTES)
-        check(slot == null && used.size < NearbyFrames.MAX_BLOB_WANT && used.add(id)) { "Repeated or overlapping file" }
+        check(slot == null && used.size < NearbyFrames.MAX_FILES && used.add(id)) { "Repeated or overlapping file" }
         slot = Slot(id, size)
     }
     @Synchronized fun file(id: Long, open: () -> InputStream, dispose: () -> Unit): Boolean {

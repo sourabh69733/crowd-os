@@ -15,9 +15,12 @@ import org.freegram.app.protocol.PhotoRef
 import java.util.Base64
 
 /** Frames of the nearby exchange, version 1. Transport metadata (hops) stays outside the signed event. */
+data class VideoPieceId(val manifestId: String, val index: Int)
+data class VideoPieceInventory(val manifestId: String, val indices: List<Int>)
+
 sealed interface NearbyFrame {
     /** [media]: this phone can exchange photos after posts. */
-    data class Hello(val version: Int, val media: Boolean = false, val fastMedia: Boolean = false) : NearbyFrame
+    data class Hello(val version: Int, val media: Boolean = false, val fastMedia: Boolean = false, val video: Boolean = false) : NearbyFrame
     data class Have(val ids: List<String>) : NearbyFrame
     data class Want(val ids: List<String>) : NearbyFrame
     data class Event(val hops: Int, val event: BulletinEvent) : NearbyFrame
@@ -38,10 +41,20 @@ sealed interface NearbyFrame {
     data class MediaGo(val session: String) : NearbyFrame
     data class FileOffer(val payloadId: Long, val sha256: String, val size: Int) : NearbyFrame
     data class FileReady(val payloadId: Long) : NearbyFrame
+    data class VideoHave(val ids: List<String>) : NearbyFrame
+    data class VideoWant(val ids: List<String>) : NearbyFrame
+    data class Manifest(val event: BulletinEvent) : NearbyFrame
+    data object ManifestsSent : NearbyFrame
+    data class PieceHave(val videos: List<VideoPieceInventory>) : NearbyFrame
+    data class PieceWant(val pieces: List<VideoPieceId>) : NearbyFrame
+    data object VideosSent : NearbyFrame
 }
 
 object NearbyFrames {
     const val VERSION = 1
+    const val MAX_VIDEO_MANIFESTS = 8
+    const val MAX_VIDEO_PIECES = 16
+    const val MAX_FILES = 24
     const val MAX_HAVE = 128
     const val MAX_WANT = 32
     const val MAX_FRAME_BYTES = 6 * 1024
@@ -58,6 +71,7 @@ object NearbyFrames {
             add(JsonObject(buildMap {
                 if (frame.media) put("media", JsonPrimitive(1))
                 if (frame.fastMedia) put("fast", JsonPrimitive(2))
+                if (frame.video) put("video", JsonPrimitive(1))
             }))
         }
         is NearbyFrame.Have -> buildJsonArray { add(JsonPrimitive("HAVE")); add(JsonArray(frame.ids.map(::JsonPrimitive))) }
@@ -82,12 +96,28 @@ object NearbyFrames {
         is NearbyFrame.MediaGo -> buildJsonArray { add(JsonPrimitive("MEDIAGO")); add(JsonPrimitive(frame.session)) }
         is NearbyFrame.FileOffer -> buildJsonArray { add(JsonPrimitive("FILE")); add(JsonPrimitive(frame.payloadId)); add(JsonPrimitive(frame.sha256)); add(JsonPrimitive(frame.size)) }
         is NearbyFrame.FileReady -> buildJsonArray { add(JsonPrimitive("FILEREADY")); add(JsonPrimitive(frame.payloadId)) }
-    }.toString().also { require(it.toByteArray(Charsets.UTF_8).size <= if (frame is NearbyFrame.Chunk) MAX_CHUNK_FRAME_BYTES else MAX_FRAME_BYTES) }
+        is NearbyFrame.VideoHave -> buildJsonArray { add(JsonPrimitive("VIDEOHAVE")); add(JsonArray(frame.ids.map(::JsonPrimitive))) }
+        is NearbyFrame.VideoWant -> buildJsonArray { add(JsonPrimitive("VIDEOWANT")); add(JsonArray(frame.ids.map(::JsonPrimitive))) }
+        is NearbyFrame.Manifest -> buildJsonArray { add(JsonPrimitive("MANIFEST")); add(Json.parseToJsonElement(Nip01Protocol.toJson(frame.event))) }
+        NearbyFrame.ManifestsSent -> buildJsonArray { add(JsonPrimitive("MANIFESTSSENT")) }
+        is NearbyFrame.PieceHave -> buildJsonArray {
+            add(JsonPrimitive("PIECEHAVE")); add(JsonArray(frame.videos.map { video -> buildJsonArray {
+                add(JsonPrimitive(video.manifestId)); add(JsonArray(video.indices.map(::JsonPrimitive)))
+            } }))
+        }
+        is NearbyFrame.PieceWant -> buildJsonArray {
+            add(JsonPrimitive("PIECEWANT")); add(JsonArray(frame.pieces.map { piece -> buildJsonArray {
+                add(JsonPrimitive(piece.manifestId)); add(JsonPrimitive(piece.index))
+            } }))
+        }
+        NearbyFrame.VideosSent -> buildJsonArray { add(JsonPrimitive("VIDEOSENT")) }
+
+    }.toString().also { require(it.toByteArray(Charsets.UTF_8).size <= if (frame is NearbyFrame.Chunk || frame is NearbyFrame.Manifest) MAX_CHUNK_FRAME_BYTES else MAX_FRAME_BYTES) }
 
     /** Parses and bounds one frame. Signatures are checked later, before storage. */
     fun parse(text: String): NearbyFrame {
         val bytes = text.toByteArray(Charsets.UTF_8).size
-        require(bytes <= MAX_CHUNK_FRAME_BYTES && (bytes <= MAX_FRAME_BYTES || text.startsWith("[\"CHUNK\""))) { "Frame too large" }
+        require(bytes <= MAX_CHUNK_FRAME_BYTES && (bytes <= MAX_FRAME_BYTES || (text.startsWith("[\"CHUNK\"") || text.startsWith("[\"MANIFEST\"")))) { "Frame too large" }
         val items = try { Json.parseToJsonElement(text).jsonArray } catch (failure: Exception) {
             throw IllegalArgumentException("Malformed frame", failure)
         }
@@ -98,6 +128,7 @@ object NearbyFrames {
                     items[1].jsonPrimitive.int,
                     (items.getOrNull(2) as? JsonObject)?.get("media")?.jsonPrimitive?.content == "1",
                     (items.getOrNull(2) as? JsonObject)?.get("fast")?.jsonPrimitive?.content == "2",
+                    (items.getOrNull(2) as? JsonObject)?.get("video")?.jsonPrimitive?.content == "1",
                 )
                 "HAVE" -> NearbyFrame.Have(ids(items[1], MAX_HAVE))
                 "WANT" -> NearbyFrame.Want(ids(items[1], MAX_WANT))
@@ -123,6 +154,37 @@ object NearbyFrames {
                 "MEDIAGO" -> { require(items.size == 2); NearbyFrame.MediaGo(id(items[1].jsonPrimitive.content)) }
                 "FILE" -> { require(items.size == 4); NearbyFrame.FileOffer(items[1].jsonPrimitive.long, id(items[2].jsonPrimitive.content), items[3].jsonPrimitive.int.also { require(it in 1..PhotoRef.MAX_BYTES) }) }
                 "FILEREADY" -> { require(items.size == 2); NearbyFrame.FileReady(items[1].jsonPrimitive.long) }
+
+                "VIDEOHAVE" -> NearbyFrame.VideoHave(ids(items[1], MAX_VIDEO_MANIFESTS))
+                "VIDEOWANT" -> NearbyFrame.VideoWant(ids(items[1], MAX_VIDEO_MANIFESTS))
+                "MANIFEST" -> {
+                    require(items.size == 2)
+                    val event = Nip01Protocol.fromJson(items[1].toString(), org.freegram.app.protocol.VideoManifest.MAX_BYTES)
+                    require(org.freegram.app.protocol.VideoManifest.of(event) != null) { "Invalid signed video manifest" }
+                    NearbyFrame.Manifest(event)
+                }
+                "MANIFESTSSENT" -> { require(items.size == 1); NearbyFrame.ManifestsSent }
+                "PIECEHAVE" -> {
+                    require(items.size == 2)
+                    val videos = items[1].jsonArray.map { value ->
+                        val entry = value.jsonArray; require(entry.size == 2)
+                        val indices = entry[1].jsonArray.map { it.jsonPrimitive.int.also { index -> require(index in 0..59) } }
+                        require(indices.size <= 60 && indices.distinct().size == indices.size)
+                        VideoPieceInventory(id(entry[0].jsonPrimitive.content), indices)
+                    }
+                    require(videos.size <= MAX_VIDEO_MANIFESTS && videos.map { it.manifestId }.distinct().size == videos.size)
+                    NearbyFrame.PieceHave(videos)
+                }
+                "PIECEWANT" -> {
+                    require(items.size == 2)
+                    val pieces = items[1].jsonArray.map { value ->
+                        val entry = value.jsonArray; require(entry.size == 2)
+                        VideoPieceId(id(entry[0].jsonPrimitive.content), entry[1].jsonPrimitive.int.also { require(it in 0..59) })
+                    }
+                    require(pieces.size <= MAX_VIDEO_PIECES && pieces.distinct().size == pieces.size)
+                    NearbyFrame.PieceWant(pieces)
+                }
+                "VIDEOSENT" -> { require(items.size == 1); NearbyFrame.VideosSent }
                 else -> throw IllegalArgumentException("Unknown frame")
             }
         } catch (failure: IllegalArgumentException) {

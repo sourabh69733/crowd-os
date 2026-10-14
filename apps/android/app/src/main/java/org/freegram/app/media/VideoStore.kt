@@ -9,6 +9,23 @@ import org.freegram.app.protocol.VideoManifest
 class VideoStore(private val dir: File, private var maxBytes: Long = DEFAULT_BYTES) {
     init { require(maxBytes > 0); check(dir.mkdirs() || dir.isDirectory); dir.listFiles { f -> f.extension == "tmp" }.orEmpty().forEach { check(it.delete()) } }
 
+    private val active = mutableMapOf<String, Int>()
+    @Synchronized fun protect(manifest: VideoManifest): AutoCloseable {
+        val hashes = setOf(manifest.event.id, manifest.ref.sha256) + manifest.pieces
+        hashes.forEach { active[it] = (active[it] ?: 0) + 1 }
+        val closed = java.util.concurrent.atomic.AtomicBoolean()
+        return AutoCloseable { synchronized(this) { if (closed.compareAndSet(false, true)) hashes.forEach { hash ->
+            val count = active.getValue(hash) - 1
+            if (count == 0) active.remove(hash) else active[hash] = count
+        } } }
+    }
+    @Synchronized fun uploaded(hash: String): Boolean = file(hash, "uploaded").isFile
+    @Synchronized fun markUploaded(hash: String) { file(hash, "uploaded").writeText("") }
+    @Synchronized fun wasComplete(hash: String): Boolean = file(hash, "seen").isFile
+    @Synchronized fun requested(hash: String): Boolean = file(hash, "wanted").isFile
+    @Synchronized fun request(hash: String) { file(hash, "wanted").writeText("") }
+    @Synchronized fun clearRequest(hash: String) { file(hash, "wanted").delete() }
+
     @Synchronized fun setLimit(bytes: Long) { require(bytes in DEFAULT_BYTES..MAX_BYTES); maxBytes = bytes }
     @Synchronized fun manifest(id: String): VideoManifest? {
         val file = file(id, "manifest")
@@ -47,6 +64,8 @@ class VideoStore(private val dir: File, private var maxBytes: Long = DEFAULT_BYT
             temp.outputStream().use { output -> manifest.pieces.forEach { piece(it)!!.inputStream().use { source -> source.copyTo(output) } } }
             require(temp.length() == manifest.ref.size.toLong() && digest(temp) == hash) { "Video does not match its fingerprint" }
             check(temp.renameTo(target)) { "Could not save video" }
+            file(hash, "seen").writeText("")
+            clearRequest(hash)
             return target
         } finally { temp.delete() }
     }
@@ -62,7 +81,7 @@ class VideoStore(private val dir: File, private var maxBytes: Long = DEFAULT_BYT
     }
     private fun makeRoom(added: Long, keep: Set<String>, own: Set<String>, protected: Set<String>) {
         var total = totalBytes()
-        val victims = files().filter { it.name.substringBefore('.') !in protected }.sortedWith(
+        val victims = files().filter { it.name.substringBefore('.') !in protected && it.name.substringBefore('.') !in active }.sortedWith(
             compareBy<File> { val hash = it.name.substringBefore('.'); when { hash !in keep -> 0; hash in own -> 2; else -> 1 } }.thenBy { it.lastModified() })
         for (victim in victims) {
             if (total + added <= maxBytes) break

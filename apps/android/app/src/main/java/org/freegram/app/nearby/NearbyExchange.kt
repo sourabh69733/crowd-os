@@ -37,7 +37,7 @@ data class NearbyPolicy(
 /** What one exchange achieved. `acknowledged` means the peer stored it, not that anyone else received it. */
 data class ExchangeReport(
     val offered: Int, val sent: Int, val acknowledged: Int, val received: Int, val rejected: Int, val outcome: String,
-    val photosReceived: Int = 0, val photosSent: Int = 0,
+    val photosReceived: Int = 0, val photosSent: Int = 0, val videoPiecesReceived: Int = 0, val videoPiecesSent: Int = 0,
 )
 
 /**
@@ -55,6 +55,8 @@ class NearbyExchange(
     private val media: MediaStore? = null,
     private val photoCheck: (ByteArray, PhotoRef) -> Boolean = PhotoEncoder::isValidPhoto,
     private val fastMedia: FastMediaHandoff? = null,
+    private val videos: org.freegram.app.media.VideoStore? = null,
+    private val localPubkey: String = "",
     private val now: () -> Long = { System.currentTimeMillis() / 1000 },
 ) {
     private class ProtocolError(message: String) : Exception(message)
@@ -63,6 +65,7 @@ class NearbyExchange(
     suspend fun run(link: PeerLink): ExchangeReport {
         var offered = 0; var sent = 0; var acknowledged = 0; var received = 0; var rejected = 0
         var photosReceived = 0; var photosSent = 0
+        var videoPiecesReceived = 0; var videoPiecesSent = 0
         var frames = 0
         suspend fun next(timeoutMs: Long = policy.frameTimeoutMs): NearbyFrame {
             if (++frames > policy.maxFrames) throw ProtocolError("Frame limit reached")
@@ -72,11 +75,11 @@ class NearbyExchange(
             }
         }
         suspend fun send(frame: NearbyFrame) = link.send(NearbyFrames.encode(frame))
-        fun report(outcome: String) = ExchangeReport(offered, sent, acknowledged, received, rejected, outcome, photosReceived, photosSent)
+        fun report(outcome: String) = ExchangeReport(offered, sent, acknowledged, received, rejected, outcome, photosReceived, photosSent, videoPiecesReceived, videoPiecesSent)
 
         return try {
             val fastSupported = media != null && fastMedia?.available == true
-            send(NearbyFrame.Hello(NearbyFrames.VERSION, media = media != null, fastMedia = fastSupported))
+            send(NearbyFrame.Hello(NearbyFrames.VERSION, media = media != null, fastMedia = fastSupported, video = videos != null))
             val hello = next() as? NearbyFrame.Hello ?: throw ProtocolError("Expected HELLO")
             if (hello.version != NearbyFrames.VERSION) throw ProtocolError("Unsupported version ${hello.version}")
 
@@ -117,6 +120,11 @@ class NearbyExchange(
                 }
             }
 
+            val videoPlan = if (videos != null && hello.video) {
+                try { VideoInventoryExchange(store, videos, localPubkey).run(offers.values.map { it.first }, ::send, ::next) }
+                catch (failure: IllegalArgumentException) { throw ProtocolError(failure.message ?: "Invalid video inventory") }
+            } else VideoPlan(emptyList(), emptyList())
+
             if (media != null && hello.media) {
                 val myPhotos = offers.values.mapNotNull { PhotoRef.of(it.first)?.sha256 }.distinct()
                     .filter { io { media.has(it) } }.take(NearbyFrames.MAX_BLOB_HAVE)
@@ -129,7 +137,7 @@ class NearbyExchange(
                 if (!myPhotos.containsAll(theirPhotoWant.hashes)) throw ProtocolError("Requested a photo that was not offered")
 
                 if (hello.fastMedia && fastSupported) {
-                    val token = if (photosWanted.isNotEmpty() || theirPhotoWant.hashes.isNotEmpty()) fastMedia.reserve() else null
+                    val token = if (photosWanted.isNotEmpty() || theirPhotoWant.hashes.isNotEmpty() || videoPlan.send.isNotEmpty() || videoPlan.receive.isNotEmpty()) fastMedia.reserve() else null
                     send(NearbyFrame.MediaReady(token))
                     val peerReady = next() as? NearbyFrame.MediaReady ?: throw ProtocolError("Expected media readiness")
                     if (token != null && peerReady.token != null) {
@@ -140,9 +148,14 @@ class NearbyExchange(
                         val sentRefs = offers.values.mapNotNull { PhotoRef.of(it.first) }.filter { it.sha256 in theirPhotoWant.hashes }.distinctBy { it.sha256 }
                         val receivedRefs = photosWanted.mapNotNull { missing[it] }
                         val result = fastMedia.transfer(peerReady.token) { fileLink, sendsFirst ->
-                            FastPhotoExchange(store, media, photoCheck).run(fileLink, sentRefs, receivedRefs, sendsFirst)
+                            val photos = FastPhotoExchange(store, media, photoCheck).run(fileLink, sentRefs, receivedRefs, sendsFirst)
+                            if (photos.outcome != "Complete" || videos == null || !hello.video) photos else {
+                                val pieces = FastVideoExchange(store, videos, localPubkey).run(fileLink, videoPlan.send, videoPlan.receive, sendsFirst)
+                                photos.copy(outcome = pieces.outcome, piecesSent = pieces.piecesSent, piecesReceived = pieces.piecesReceived)
+                            }
                         }
                         photosSent = result.sent; photosReceived = result.received
+                        videoPiecesSent = result.piecesSent; videoPiecesReceived = result.piecesReceived
                         return report(result.outcome)
                     }
                     fastMedia.release()

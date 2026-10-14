@@ -144,14 +144,14 @@ class NearbySharing(
             listener.onStatus("Exchanging with $peer…")
             scope.launch(Dispatchers.IO) {
                 val bridgeTo = if (store.autoBridge()) listOf(store.relayUrl(0), store.relayUrl(1)) else emptyList()
-                val report = try { NearbyExchange(store, bridgeTo = bridgeTo, media = media, fastMedia = mediaHandoff(endpointId)).run(link) } finally {
+                val report = try { NearbyExchange(store, bridgeTo = bridgeTo, media = media, fastMedia = mediaHandoff(endpointId), videos = org.freegram.app.media.VideoStore.shared(context), localPubkey = org.freegram.app.identity.ProtectedIdentity(context).publicKeyHex()).run(link) } finally {
                     link.awaitFlushed(5_000)
                     if (links[endpointId] === link) {
                         client.disconnectFromEndpoint(endpointId)
                         release(endpointId)
                     }
                 }
-                if (report.photosReceived > 0 || (report.received > 0 && bridgeTo.isNotEmpty())) RelayRetryWorker.schedule(context)
+                if (report.videoPiecesReceived > 0 || report.photosReceived > 0 || (report.received > 0 && bridgeTo.isNotEmpty())) RelayRetryWorker.schedule(context)
                 withContext(Dispatchers.Main) { if (running) listener.onExchange(peer, report) }
             }
         }

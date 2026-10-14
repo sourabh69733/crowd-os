@@ -216,6 +216,16 @@ class RoomStore(context: Context, databaseName: String = "freegram.db") {
         }
     }
 
+    suspend fun videoOwners(pubkey: String): List<Pair<org.freegram.app.protocol.VideoRef, Boolean>> = database.withTransaction {
+        dao.savedWires().mapNotNull { wire ->
+            val event = runCatching { Nip01Protocol.fromJson(wire) }.getOrNull() ?: return@mapNotNull null
+            if (event.pubkey != pubkey || !Nip01Protocol.verifyBulletin(event)) return@mapNotNull null
+            val ref = org.freegram.app.protocol.VideoRef.of(event) ?: return@mapNotNull null
+            val states = dao.allDeliveries().filter { it.eventId == event.id }
+            ref to (states.isEmpty() || states.any { it.state != "Accepted" })
+        }
+    }
+
     /** Stored posts currently hidden by maintainers (not by this phone's own block list). */
     suspend fun hiddenCount(): Int {
         val hidden = hidden()

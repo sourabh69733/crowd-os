@@ -79,6 +79,8 @@ object VideoEncoder {
 
     private suspend fun export(context: Context, source: File, output: File, height: Int, seconds: Int) = withContext(Dispatchers.Main) {
         var activeTransformer: Transformer? = null
+        val handler = android.os.Handler(android.os.Looper.getMainLooper())
+        var watchdog: Runnable? = null
         try { withTimeout(5 * 60_000L) {
             suspendCancellableCoroutine<Unit> { continuation ->
                 val bitrate = minOf(1_500_000, (VideoManifest.MAX_VIDEO_BYTES.toLong() * 8 * 8 / 10 / seconds - 96_000).toInt()).coerceAtLeast(200_000)
@@ -88,21 +90,43 @@ object VideoEncoder {
                 val transformer = Transformer.Builder(context).setVideoMimeType(MimeTypes.VIDEO_H264).setAudioMimeType(MimeTypes.AUDIO_AAC)
                     .setEncoderFactory(encoder).addListener(object : Transformer.Listener {
                         override fun onCompleted(composition: Composition, exportResult: ExportResult) {
+                            watchdog?.let(handler::removeCallbacks)
                             if (continuation.isActive) continuation.resume(Unit)
                         }
                         override fun onError(composition: Composition, exportResult: ExportResult, exportException: ExportException) {
+                            watchdog?.let(handler::removeCallbacks)
                             if (continuation.isActive) continuation.resumeWithException(exportException)
                         }
                     }).build()
                 activeTransformer = transformer
-                continuation.invokeOnCancellation { android.os.Handler(android.os.Looper.getMainLooper()).post { transformer.cancel() } }
+                continuation.invokeOnCancellation { watchdog?.let(handler::removeCallbacks) }
+                watchdog = Runnable {
+                    if (continuation.isActive) {
+                        if (output.length() > VideoManifest.MAX_SOURCE_BYTES) {
+                            transformer.cancel()
+                            continuation.resumeWithException(IllegalArgumentException("Video export is too large"))
+                        } else watchdog?.let { handler.postDelayed(it, 500) }
+                    }
+                }
                 val effect = Presentation.createForWidthAndHeight(if (height == 720) 1280 else 854, height, Presentation.LAYOUT_SCALE_TO_FIT)
                 val edited = EditedMediaItem.Builder(MediaItem.fromUri(Uri.fromFile(source))).setEffects(Effects(emptyList(), listOf(effect))).build()
-                try { transformer.start(edited, output.path) }
+                try { transformer.start(edited, output.path); watchdog?.let { handler.postDelayed(it, 500) } }
                 catch (failure: Exception) { if (continuation.isActive) continuation.resumeWithException(failure) }
             }
-        } } finally { activeTransformer?.cancel() }
+        } } finally { watchdog?.let(handler::removeCallbacks); activeTransformer?.cancel() }
     }
+
+    fun isValid(file: File, ref: org.freegram.app.protocol.VideoRef): Boolean = runCatching {
+        if (file.length() != ref.size.toLong()) return@runCatching false
+        val (width, height, seconds) = metadata(file)
+        if (width != ref.width || height != ref.height || seconds != ref.durationSeconds) return@runCatching false
+        val extractor = MediaExtractor()
+        try {
+            extractor.setDataSource(file.path)
+            val types = (0 until extractor.trackCount).map { extractor.getTrackFormat(it).getString(android.media.MediaFormat.KEY_MIME) }
+            "video/avc" in types && types.all { it == "video/avc" || it == "audio/mp4a-latm" }
+        } finally { extractor.release() }
+    }.getOrDefault(false)
 
     private fun metadata(file: File): Triple<Int, Int, Int> {
         val metadata = MediaMetadataRetriever()
