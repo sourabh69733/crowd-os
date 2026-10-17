@@ -15,14 +15,14 @@ import org.freegram.app.protocol.Nip01Protocol
 import org.freegram.app.protocol.PhotoRef
 
 class BlossomClient(private val client: OkHttpClient = OkHttpClient.Builder()
-    .followRedirects(false).followSslRedirects(false).callTimeout(30, TimeUnit.SECONDS).build()) {
+    .followRedirects(false).followSslRedirects(false).callTimeout(180, TimeUnit.SECONDS).build()) : VideoServer {
     fun upload(ref: PhotoRef, bytes: ByteArray, sign: (Array<Array<String>>) -> BulletinEvent): Boolean =
         uploadBlob(ref.sha256, ref.size, bytes, PhotoRef.MIME, "jpg", sign)
 
-    fun uploadVideo(manifest: org.freegram.app.protocol.VideoManifest, bytes: ByteArray, sign: (Array<Array<String>>) -> BulletinEvent): Boolean =
+    override fun uploadVideo(manifest: org.freegram.app.protocol.VideoManifest, bytes: ByteArray, sign: (Array<Array<String>>) -> BulletinEvent): Boolean =
         uploadBlob(manifest.ref.sha256, manifest.ref.size, bytes, "video/mp4", "mp4", sign)
 
-    fun uploadManifest(manifest: org.freegram.app.protocol.VideoManifest, sign: (Array<Array<String>>) -> BulletinEvent): Boolean {
+    override fun uploadManifest(manifest: org.freegram.app.protocol.VideoManifest, sign: (Array<Array<String>>) -> BulletinEvent): Boolean {
         val bytes = Nip01Protocol.toJson(manifest.event).toByteArray(Charsets.UTF_8)
         return uploadBlob(manifest.ref.manifestHash, bytes.size, bytes, "application/json", "json", sign)
     }
@@ -47,7 +47,7 @@ class BlossomClient(private val client: OkHttpClient = OkHttpClient.Builder()
 
     fun download(ref: PhotoRef): ByteArray? = downloadBlob(ref.sha256, ref.size, "jpg")
     fun downloadVideo(ref: org.freegram.app.protocol.VideoRef): ByteArray? = downloadBlob(ref.sha256, ref.size, "mp4")
-    fun downloadPiece(manifest: org.freegram.app.protocol.VideoManifest, index: Int): ByteArray? {
+    override fun downloadPiece(manifest: org.freegram.app.protocol.VideoManifest, index: Int): ByteArray? {
         val size = manifest.pieceSize(index)
         val start = index.toLong() * org.freegram.app.protocol.VideoManifest.PIECE_BYTES
         val end = start + size - 1
@@ -58,7 +58,7 @@ class BlossomClient(private val client: OkHttpClient = OkHttpClient.Builder()
             bytes.takeIf { it.size == size && sha256Hex(it) == manifest.pieces[index] }
         }
     }
-    fun downloadManifest(ref: org.freegram.app.protocol.VideoRef): org.freegram.app.protocol.VideoManifest? {
+    override fun downloadManifest(ref: org.freegram.app.protocol.VideoRef): org.freegram.app.protocol.VideoManifest? {
         val bytes = downloadBlob(ref.manifestHash, org.freegram.app.protocol.VideoManifest.MAX_BYTES, "json", exact = false) ?: return null
         val manifest = runCatching { org.freegram.app.protocol.VideoManifest.of(Nip01Protocol.fromJson(String(bytes, Charsets.UTF_8), org.freegram.app.protocol.VideoManifest.MAX_BYTES)) }.getOrNull()
         return manifest?.takeIf { it.ref == ref }

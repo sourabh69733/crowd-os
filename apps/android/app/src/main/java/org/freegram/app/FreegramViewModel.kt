@@ -75,6 +75,7 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
     private val identity = ProtectedIdentity(application)
     private val relayClient = RelayClient()
     private val media = MediaStore.shared(application)
+    private val videos = org.freegram.app.media.VideoStore.shared(application)
 
     // Inputs
     override var draft by mutableStateOf("")
@@ -165,6 +166,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         posts.firstOrNull { it.id == id } ?: discoverPosts.firstOrNull { it.id == id } ?: threadPosts.firstOrNull { it.id == id }
     }
     override val draftPhoto: ImageBitmap? get() = pickedPreview
+    private var pickedVideo by mutableStateOf<org.freegram.app.media.EncodedVideo?>(null)
+    override var draftVideo by mutableStateOf<org.freegram.shared.model.DraftVideoUi?>(null); private set
+    override var videoProcessing by mutableStateOf(false); private set
     override var toast by mutableStateOf<String?>(null); private set
     override val reportReasons: List<String> get() = REPORT_REASONS
     override val canReport: Boolean get() = maintainers.any { it.enabled && it.pubkey != pubkeyHex }
@@ -264,12 +268,69 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     fun pickPhoto(uri: Uri) = busyAction({ toast = it ?: "Could not use that photo" }) {
         val encoded = withContext(Dispatchers.Default) { PhotoEncoder.encode(getApplication<Application>().contentResolver, uri) }
+        removeVideo()
         pickedPhoto = encoded
         pickedPreview = withContext(Dispatchers.Default) { BitmapFactory.decodeByteArray(encoded.bytes, 0, encoded.bytes.size).asImageBitmap() }
         message = "Photo ready: ${encoded.ref.width}×${encoded.ref.height}, ${encoded.bytes.size / 1024} KB. Location and camera details removed."
     }
 
     override fun removePhoto() { pickedPhoto = null; pickedPreview = null }
+
+    /** Shrinks and cleans a picked video off the main thread. A post has a photo or a video, not both. */
+    fun pickVideo(uri: Uri) {
+        if (videoProcessing) return
+        viewModelScope.launch {
+            videoProcessing = true
+            try {
+                val encoded = org.freegram.app.media.VideoEncoder.encode(getApplication(), uri)
+                removePhoto()
+                pickedVideo = encoded
+                draftVideo = org.freegram.shared.model.DraftVideoUi(
+                    withContext(Dispatchers.IO) { videoFrame(encoded.bytes) }, duration(encoded.durationSeconds), sizeLabel(encoded.bytes.size.toLong()))
+            } catch (failure: kotlinx.coroutines.CancellationException) { throw failure }
+            catch (failure: Exception) { toast = failure.message ?: "Could not use that video" }
+            finally { videoProcessing = false }
+        }
+    }
+
+    override fun removeVideo() { pickedVideo = null; draftVideo = null }
+
+    override fun downloadVideo(postId: String) {
+        viewModelScope.launch {
+            val ref = findEvent(postId)?.let(org.freegram.app.protocol.VideoRef::of) ?: return@launch
+            io { videos.request(ref.sha256) }
+            RelayRetryWorker.schedulePhotos(getApplication())
+            toast = if (online) "Downloading the video." else "The video downloads when you're online, or arrives from nearby phones."
+        }
+    }
+
+    /** A still frame for a video's preview, from its bytes (draft) or file (saved post). */
+    private fun videoFrame(bytes: ByteArray): ImageBitmap? {
+        val file = java.io.File.createTempFile("video-frame-", ".mp4", getApplication<Application>().cacheDir)
+        return try { file.writeBytes(bytes); videoFrame(file) } finally { file.delete() }
+    }
+
+    private fun videoFrame(file: java.io.File): ImageBitmap? = runCatching {
+        val retriever = android.media.MediaMetadataRetriever()
+        try {
+            retriever.setDataSource(file.path)
+            retriever.getScaledFrameAtTime(0, android.media.MediaMetadataRetriever.OPTION_CLOSEST_SYNC, 640, 640)?.asImageBitmap()
+        } finally { retriever.release() }
+    }.getOrNull()
+
+    private fun duration(seconds: Int) = "%d:%02d".format(seconds / 60, seconds % 60)
+    private fun sizeLabel(bytes: Long) = if (bytes >= 1024 * 1024) "%.1f MB".format(bytes / 1048576.0) else "${bytes / 1024} KB"
+
+    /** What a post's video looks like on screen. Uses size-only checks; full fingerprint checks happen before sending. */
+    private fun videoUi(event: BulletinEvent): org.freegram.shared.model.VideoUi {
+        val ref = org.freegram.app.protocol.VideoRef.of(event) ?: return org.freegram.shared.model.VideoUi.None
+        val manifest = videos.manifest(ref.manifestId)?.takeIf { it.matches(event) }
+            ?: return org.freegram.shared.model.VideoUi.Waiting(duration(ref.durationSeconds))
+        val file = videos.readyFile(manifest)
+            ?: return org.freegram.shared.model.VideoUi.Receiving(videos.savedPieces(manifest), manifest.pieces.size, duration(ref.durationSeconds), sizeLabel(ref.size.toLong()))
+        val frame = synchronized(thumbnails) { thumbnails["video:" + ref.sha256] } ?: videoFrame(file)?.also { synchronized(thumbnails) { thumbnails["video:" + ref.sha256] = it } }
+        return org.freegram.shared.model.VideoUi.Ready(file.path, duration(ref.durationSeconds), sizeLabel(ref.size.toLong()), frame)
+    }
 
     override fun publish() { publishJob() }
 
@@ -278,10 +339,17 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         require(relays.all { it.startsWith("wss://") } && relays.distinct().size == 2) { "Use two distinct wss:// relay URLs" }
         val text = draft
         val photo = pickedPhoto
+        val video = pickedVideo
         val signed = io {
             if (photo != null) media.put(photo.ref.sha256, photo.bytes, referencedPhotos() + photo.ref.sha256)
+            // The video's manifest and pieces are saved first, so the post never points at a video this phone lacks.
+            val manifest = video?.let { v ->
+                identity.withSecret { org.freegram.app.protocol.VideoManifest.sign(it, v.bytes, v.width, v.height, v.durationSeconds, nowSeconds()) }
+                    .also { org.freegram.app.media.VideoPosts.storeOwn(videos, it, v.bytes) }
+            }
             val tags = buildList {
                 if (photo != null) add(photo.ref.copy(url = org.freegram.app.media.BlossomClient.url(photo.ref.sha256)).toTag())
+                if (manifest != null) add(manifest.ref.toTag())
                 if (discoverOptIn) add(Discover.tag())
             }.toTypedArray()
             identity.withSecret { Nip01Protocol.signBulletin(it, text, nowSeconds(), tags) }.also {
@@ -293,7 +361,9 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         show(signed)
         draft = ""
         removePhoto()
+        removeVideo()
         toast = if (online) "Posted. Sending to your servers." else "Saved. Nearby phones can get it now; servers once you're online."
+        if (video != null) RelayRetryWorker.schedulePhotos(getApplication())
         deliver(signed)
         refreshLists()
     }
@@ -538,6 +608,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
                 runCatching { fetchThreadsFor(posts.filter { it.replyTo == null }.map { it.id }.take(100)) }
             }
             if (io { store.retryableDeliveries(nowSeconds() - RetryPolicy.MAX_AGE_SECONDS).isNotEmpty() }) RelayRetryWorker.schedule(getApplication())
+            // Photos and videos sync in the background, so a refresh doesn't wait for big downloads.
+            if (online) RelayRetryWorker.schedulePhotos(getApplication())
             refreshLists()
             toast = when {
                 !online -> "No internet. Showing what's on this phone."
@@ -883,7 +955,8 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
         return PostUi(event.id, event.pubkey, label, authorNpub.takeLast(4), hueOf(event.pubkey), ago(event.createdAt), event.content, photo, source,
             mine = event.pubkey == pubkeyHex, followed = event.pubkey in followed,
             replyTo = Replies.rootOf(event), replies = replyCounts[event.id] ?: 0,
-            likes = likeMap[event.id]?.size ?: 0, likedByMe = likeMap[event.id]?.contains(pubkeyHex) == true)
+            likes = likeMap[event.id]?.size ?: 0, likedByMe = likeMap[event.id]?.contains(pubkeyHex) == true,
+            video = videoUi(event))
     }
 
     private fun thumbnail(sha: String): ImageBitmap? = synchronized(thumbnails) {

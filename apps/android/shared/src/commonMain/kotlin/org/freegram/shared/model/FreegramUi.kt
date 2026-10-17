@@ -22,6 +22,19 @@ sealed interface PhotoUi {
     data object Missing : PhotoUi
 }
 
+sealed interface VideoUi {
+    data object None : VideoUi
+    /** The post has a video, but its details haven't reached this phone yet. */
+    data class Waiting(val duration: String) : VideoUi
+    /** Pieces arriving from nearby phones or the server. */
+    data class Receiving(val have: Int, val total: Int, val duration: String, val size: String) : VideoUi
+    /** Every piece arrived and matched; [path] is a local file the player can open. */
+    data class Ready(val path: String, val duration: String, val size: String, val thumbnail: ImageBitmap?) : VideoUi
+}
+
+/** A video picked for a new post, already shrunk and cleaned. */
+data class DraftVideoUi(val thumbnail: ImageBitmap?, val duration: String, val size: String)
+
 data class PostUi(
     val id: String,
     val authorKey: String,
@@ -41,6 +54,7 @@ data class PostUi(
     val replies: Int = 0,
     val likes: Int = 0,
     val likedByMe: Boolean = false,
+    val video: VideoUi = VideoUi.None,
 )
 
 data class NearbyActivity(val text: String, val time: String)
@@ -151,6 +165,9 @@ interface FreegramUi : SettingsUi {
     val selected: PostUi?
     val draft: String
     val draftPhoto: ImageBitmap?
+    val draftVideo: DraftVideoUi?
+    /** True while a picked video is being shrunk. */
+    val videoProcessing: Boolean
     val nearby: NearbyUi
     val me: MeUi
     val toast: String?
@@ -163,6 +180,9 @@ interface FreegramUi : SettingsUi {
 
     fun updateDraft(text: String)
     fun removePhoto()
+    fun removeVideo()
+    /** Starts getting a post's video, even on mobile data. */
+    fun downloadVideo(postId: String)
     fun publish()
     fun open(postId: String)
     fun closeDetail()
@@ -201,6 +221,9 @@ interface FreegramUi : SettingsUi {
 /** Things only the platform can do (system pickers, permissions, clipboard). */
 class PlatformActions(
     val pickPhoto: () -> Unit,
+    val pickVideo: () -> Unit,
+    /** Plays a local video file with standard controls. */
+    val videoPlayer: @Composable (path: String) -> Unit,
     val startNearby: () -> Unit,
     val openWifiSettings: () -> Unit,
     val copyText: (label: String, text: String) -> Unit,

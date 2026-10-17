@@ -20,7 +20,10 @@ class RelayRetryWorker(context: Context, params: WorkerParameters) : CoroutineWo
         val photosRemaining = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
             org.freegram.app.media.OnlinePhotos(applicationContext, store, org.freegram.app.media.MediaStore.shared(applicationContext), org.freegram.app.identity.ProtectedIdentity(applicationContext)).sync()
         }
-        val remaining = retryPendingDeliveries(store, RelayClient()::publish) || photosRemaining
+        val videosRemaining = kotlinx.coroutines.withContext(kotlinx.coroutines.Dispatchers.IO) {
+            org.freegram.app.media.OnlineVideos.forApp(applicationContext, store).sync()
+        }
+        val remaining = retryPendingDeliveries(store, RelayClient()::publish) || photosRemaining || videosRemaining
         // Stop after MAX_RUNS; states stay visible and the user can still retry manually.
         return if (remaining && runAttemptCount + 1 < MAX_RUNS) Result.retry() else Result.success()
     }

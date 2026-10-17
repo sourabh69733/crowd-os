@@ -31,6 +31,8 @@ import androidx.compose.ui.unit.sp
 import org.freegram.shared.model.PhotoUi
 import org.freegram.shared.model.PostSource
 import org.freegram.shared.model.PostUi
+import org.freegram.shared.model.VideoUi
+import androidx.compose.material3.LinearProgressIndicator
 
 @Composable
 fun Avatar(label: String, hue: Float, size: Dp = 40.dp) {
@@ -98,6 +100,7 @@ fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null,
         }
         if (post.text.isNotBlank()) Text(post.text, color = c.ink, fontSize = 15.sp, lineHeight = 21.sp)
         PhotoView(post.photo)
+        VideoBlock(post.video)
         Row(verticalAlignment = Alignment.CenterVertically, horizontalArrangement = Arrangement.spacedBy(14.dp)) {
             SourceChip(post.source)
             Spacer(Modifier.weight(1f))
@@ -106,6 +109,34 @@ fun PostCard(post: PostUi, onClick: (() -> Unit)?, onMore: (() -> Unit)? = null,
                     .padding(horizontal = 6.dp, vertical = 2.dp))
             if (post.replyTo == null) Text("↩ ${post.replies}", color = c.ink2, fontSize = 14.sp)
         }
+    }
+}
+
+/** A post's video in a card: thumbnail with play mark, pieces arriving, or waiting for details. Playing happens on the post page. */
+@Composable
+fun VideoBlock(video: VideoUi) {
+    val c = Fg.colors
+    val frame = Modifier.fillMaxWidth().clip(RoundedCornerShape(12.dp)).background(Color(0xFF16211E))
+    when (video) {
+        VideoUi.None -> Unit
+        is VideoUi.Ready -> Box(frame.heightIn(min = 180.dp), contentAlignment = Alignment.Center) {
+            video.thumbnail?.let { Image(it, contentDescription = "Video", contentScale = ContentScale.Crop, modifier = Modifier.fillMaxWidth().heightIn(max = 360.dp)) }
+            Box(Modifier.size(52.dp).clip(RoundedCornerShape(50)).background(Color.Black.copy(alpha = 0.55f)), contentAlignment = Alignment.Center) {
+                Icon(FgIcons.Play, contentDescription = "Play video", tint = Color.White, modifier = Modifier.size(26.dp))
+            }
+            Text(video.duration, color = Color.White, fontSize = 11.sp, modifier = Modifier.align(Alignment.BottomEnd).padding(8.dp)
+                .clip(RoundedCornerShape(8.dp)).background(Color.Black.copy(alpha = 0.55f)).padding(horizontal = 6.dp, vertical = 2.dp))
+        }
+        is VideoUi.Receiving -> Column(Modifier.fillMaxWidth().border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(14.dp),
+            verticalArrangement = Arrangement.spacedBy(6.dp)) {
+            Text("Video ${video.duration} · ${video.size}", color = c.ink, fontSize = 13.sp, fontWeight = FontWeight.SemiBold)
+            LinearProgressIndicator(progress = { if (video.total == 0) 0f else video.have.toFloat() / video.total },
+                modifier = Modifier.fillMaxWidth(), color = c.amber, trackColor = c.surface2)
+            Text("${video.have} of ${video.total} pieces. Keep Wi-Fi on near other Freegram phones, or open the post to download it.",
+                color = c.ink3, fontSize = 12.sp)
+        }
+        is VideoUi.Waiting -> Text("Video ${video.duration}. It will arrive from a nearby phone or the server.", color = c.ink3, fontSize = 13.sp,
+            modifier = Modifier.fillMaxWidth().border(1.dp, c.line, RoundedCornerShape(12.dp)).padding(14.dp))
     }
 }
 

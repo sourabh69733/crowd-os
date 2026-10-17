@@ -62,6 +62,8 @@ import org.freegram.shared.model.FreegramUi
 import org.freegram.shared.model.PersonState
 import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.PostUi
+import androidx.compose.material3.LinearProgressIndicator
+import org.freegram.shared.model.VideoUi
 import org.freegram.shared.model.SettingsPage
 import io.github.alexzhirkevich.qrose.rememberQrCodePainter
 
@@ -122,7 +124,7 @@ fun HomeScreen(ui: FreegramUi) {
 
 @OptIn(ExperimentalMaterial3Api::class)
 @Composable
-fun PostDetailScreen(ui: FreegramUi, post: PostUi) {
+fun PostDetailScreen(ui: FreegramUi, post: PostUi, platform: PlatformActions) {
     val c = Fg.colors
     var sheet by remember(post.id) { mutableStateOf<String?>(null) }
     SystemBack(onBack = ui::closeDetail)
@@ -138,6 +140,15 @@ fun PostDetailScreen(ui: FreegramUi, post: PostUi) {
                 modifier = if (root != null) Modifier.clickable { ui.open(root.id) }.padding(vertical = 4.dp) else Modifier)
         }
         PostCard(post, onClick = null, onMore = { sheet = "menu" }, onLike = { ui.like(post.id, !post.likedByMe) })
+        when (val video = post.video) {
+            is VideoUi.Ready -> {
+                Box(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp).clip(RoundedCornerShape(12.dp))) { platform.videoPlayer(video.path) }
+                Hint("Video checked: every piece matches its fingerprint. Saved on this phone; it passes to nearby phones and uploads when online.")
+            }
+            is VideoUi.Receiving, is VideoUi.Waiting ->
+                FgButton("Download video now", onClick = { ui.downloadVideo(post.id) }, secondary = true)
+            VideoUi.None -> Unit
+        }
         var explain by remember { mutableStateOf(false) }
         Column(Modifier.fillMaxWidth().clip(RoundedCornerShape(14.dp)).background(c.surface).border(1.dp, c.line, RoundedCornerShape(14.dp))
             .clickable { explain = !explain }.padding(14.dp), verticalArrangement = Arrangement.spacedBy(6.dp)) {
@@ -242,16 +253,30 @@ fun ComposeScreen(ui: FreegramUi, platform: PlatformActions, onDone: () -> Unit)
             modifier = Modifier.fillMaxWidth().heightIn(min = 140.dp), enabled = ui.ready)
         Hint("$bytes / 2048", Modifier.fillMaxWidth(), TextAlign.End)
         val photo = ui.draftPhoto
-        if (photo != null) {
-            Image(photo, contentDescription = "Photo to post", contentScale = ContentScale.Crop,
-                modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(12.dp)))
-            FgButton("Remove photo", onClick = ui::removePhoto, secondary = true)
-        } else {
-            FgButton("Add photo", onClick = platform.pickPhoto, secondary = true, enabled = ui.ready && !ui.busy)
+        val video = ui.draftVideo
+        when {
+            photo != null -> {
+                Image(photo, contentDescription = "Photo to post", contentScale = ContentScale.Crop,
+                    modifier = Modifier.fillMaxWidth().heightIn(max = 320.dp).clip(RoundedCornerShape(12.dp)))
+                FgButton("Remove photo", onClick = ui::removePhoto, secondary = true)
+            }
+            ui.videoProcessing -> {
+                Text("Shrinking video and removing its location…", color = c.ink2, fontSize = 13.sp)
+                LinearProgressIndicator(modifier = Modifier.fillMaxWidth(), color = c.teal, trackColor = c.surface2)
+            }
+            video != null -> {
+                VideoBlock(VideoUi.Ready("", video.duration, video.size, video.thumbnail))
+                Hint("Video ready: ${video.duration}, ${video.size}. Location and camera details removed.")
+                FgButton("Remove video", onClick = ui::removeVideo, secondary = true)
+            }
+            else -> Row(horizontalArrangement = Arrangement.spacedBy(10.dp)) {
+                FgButton("Add photo", onClick = platform.pickPhoto, secondary = true, enabled = ui.ready && !ui.busy, modifier = Modifier.weight(1f))
+                FgButton("Add video", onClick = platform.pickVideo, secondary = true, enabled = ui.ready && !ui.busy, modifier = Modifier.weight(1f))
+            }
         }
-        Hint("Photos are shrunk to 1600 px and their location and camera details are removed.")
+        Hint("Photos are shrunk to 1600 px; videos to 720p, up to 5 minutes. Location and camera details are removed. Videos travel slower than text and photos.")
         FgButton(if (ui.busy) "Posting…" else "Post", onClick = { ui.publish(); onDone() },
-            enabled = ui.ready && !ui.busy && (ui.draft.isNotBlank() || photo != null) && bytes <= 2048)
+            enabled = ui.ready && !ui.busy && !ui.videoProcessing && (ui.draft.isNotBlank() || photo != null || video != null) && bytes <= 2048)
         Hint(if (ui.online) "Sends to your servers now, and to nearby phones when sharing is on."
         else "No internet: saved now, shared with nearby phones, and sent to servers when you're back online.")
     }

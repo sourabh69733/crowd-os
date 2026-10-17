@@ -60,12 +60,15 @@ class MainActivity : ComponentActivity() {
 private fun FreegramHost(model: FreegramViewModel) {
     val context = LocalContext.current
     val photoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickPhoto) }
+    val videoPicker = rememberLauncherForActivityResult(ActivityResultContracts.PickVisualMedia()) { uri -> uri?.let(model::pickVideo) }
     val permissions = rememberLauncherForActivityResult(ActivityResultContracts.RequestMultiplePermissions()) { granted ->
         if (nearbyPermissions().all { granted[it] == true }) model.startNearby() else model.nearbyPermissionDenied()
     }
     val platform = remember {
         PlatformActions(
             pickPhoto = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
+            pickVideo = { videoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
+            videoPlayer = { path -> VideoPlayer(path) },
             startNearby = { permissions.launch(nearbyPermissions() + optionalNearbyPermissions()) },
             openWifiSettings = { context.startActivity(wifiSettingsIntent()) },
             copyText = { label, text ->
@@ -181,4 +184,24 @@ private fun DeveloperPage(model: FreegramViewModel) {
                 Button(enabled = enabled, onClick = { model.open(saved) }) { Text("Open ${saved.id.take(12)}…") }
             }
     }
+}
+
+/** Android's built-in player with standard controls, so the app needs no extra player library. Doesn't autoplay. */
+@Composable
+private fun VideoPlayer(path: String) {
+    androidx.compose.ui.viewinterop.AndroidView(
+        factory = { context ->
+            android.widget.VideoView(context).apply {
+                val controls = android.widget.MediaController(context)
+                controls.setAnchorView(this)
+                setMediaController(controls)
+                setOnPreparedListener { player -> player.isLooping = false; seekTo(1); controls.show(0) }
+                tag = path
+                setVideoPath(path)
+            }
+        },
+        update = { view -> if (view.tag != path) { view.tag = path; view.setVideoPath(path) } },
+        onRelease = { it.stopPlayback() },
+        modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp),
+    )
 }

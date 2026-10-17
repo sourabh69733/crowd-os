@@ -79,7 +79,7 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
             Box(Modifier.fillMaxSize().background(c.paper).padding(padding)) {
                 val selected = ui.selected
                 when {
-                    selected != null -> PostDetailScreen(ui, selected)
+                    selected != null -> PostDetailScreen(ui, selected, platform)
                     tab == Tab.Home -> HomeScreen(ui)
                     tab == Tab.Discover -> DiscoverScreen(ui)
                     tab == Tab.Nearby -> NearbyScreen(ui, platform)

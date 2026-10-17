@@ -69,6 +69,12 @@ class VideoStore(private val dir: File, private var maxBytes: Long = DEFAULT_BYT
             return target
         } finally { temp.delete() }
     }
+    /** Pieces already saved, by size only. Pieces are checked when written, so this skips re-hashing for screens. */
+    @Synchronized fun savedPieces(manifest: VideoManifest): Int =
+        manifest.pieces.indices.count { file(manifest.pieces[it], "piece").let { f -> f.isFile && f.length() == manifest.pieceSize(it).toLong() } }
+    /** The assembled video, by size only (it was checked when assembled). For screens; use [complete] before sending. */
+    @Synchronized fun readyFile(manifest: VideoManifest): File? =
+        file(manifest.ref.sha256, "mp4").takeIf { it.isFile && it.length() == manifest.ref.size.toLong() }
     @Synchronized fun totalBytes(): Long = files().sumOf { it.length() }
 
     private fun write(hash: String, extension: String, bytes: ByteArray, keep: Set<String>, own: Set<String>, protected: Set<String>) {

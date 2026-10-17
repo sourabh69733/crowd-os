@@ -1,6 +1,6 @@
 # Freegram progress
 
-One page to see where Freegram stands. Updated 14 October 2026. All work is on `main`. Latest app version: **0.6.1** (website still offers 0.4.1).
+One page to see where Freegram stands. Updated 18 October 2026. All work is on `main`. Latest app version: **0.7.0** (website still offers 0.4.1).
 
 - Details and test evidence: [STATUS_LOG.md](STATUS_LOG.md)
 - Next features (photos, videos, reach without internet): [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md)
@@ -19,7 +19,7 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 2. Reliability and safety | Nothing lost, no false "sent", abuse limits | ✅ |
 | 3. Nearby sharing | Phone to phone without internet | 🟡 first 2-phone test passed |
 | 4. Offline to internet | Carried posts reach servers once online | 🟡 |
-| 5. Photos and videos | Media | 🟡 photos nearby and online; video engine built, no video screens yet; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
+| 5. Photos and videos | Media | 🟡 photos and videos (0.7.0), nearby and online; not yet tested on phones; plan in [OFFLINE_MEDIA_PLAN.md](OFFLINE_MEDIA_PLAN.md) |
 | Moderation | Maintainers, reports, appeals | 🟡 you are the default maintainer |
 | New UI | Screens from the approved mockup | ✅ |
 | Discover | Find people and posts | 🟡 |
@@ -83,7 +83,10 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 - [ ] Media server deletion and moderation workflow (today only `BLOCKED_HASHES`)
 - [ ] Real-phone online photo upload, download and carrier reconnect test
 - [ ] Videos in pieces from several phones, resumable ([feature 3](OFFLINE_MEDIA_PLAN.md#3-videos)). Engine built (14 Oct): shrinking with metadata removal, signed manifests, pieces over Nearby file links from several phones, resume, retention, server upload and byte-range download, with tests
-- [ ] Video screens: pick a video, post it, show progress, play it
+- [x] Video posts (0.7.0, 18 Oct): Add video (up to 5 minutes, shrunk to 720p, location removed), pieces progress on cards, built-in player on the post page, photo or video per post
+- [x] Video sync: own videos upload on any network; others' videos download on Wi-Fi, or on mobile data only after "Download video now"
+- [ ] Test videos on two phones: post, Nearby pieces, resume, server upload and download, playback
+- [ ] Reels tab: full-screen vertical swipe, autoplay, preload next, offline videos first (planned 0.8.0)
 - [ ] "Send to a nearby phone" for big files ([feature 4](OFFLINE_MEDIA_PLAN.md#4-send-to-a-nearby-phone-big-files-on-purpose))
 
 ### Moderation 🟡
@@ -170,14 +173,15 @@ Legend: ✅ done · 🟡 built, not fully tested on real phones · ⬜ not start
 | 10 Oct | Fast photos pause cluster sharing for a bounded point-to-point media window because Nearby allows one active strategy. Older peers use v1 chunks. No measured speed or specific-radio claim until device testing. |
 | 10 Oct | Reach settings apply locally to offers and acceptance, without changing protocol v1. Eligible Discover posts are carried with no relay deliveries. Nearby defaults to 2 hours; longer runs use more battery and changes apply on the next start. |
 | 10 Oct | Next: photos and videos for everyone, videos slower but supported; fast phone-to-phone Wi-Fi for media; Wi-Fi link only while media is waiting. |
+| 18 Oct | Videos: up to 5 minutes, 720p, one photo or video per post, play only once every piece is checked. Others' videos auto-download only on Wi-Fi; own videos upload on any network. Built-in Android player, no extra library. Reels tab planned for 0.8.0. |
 | 14 Oct | Media server upload limits: 50 MB per ID and 200 MB per day in total, because new IDs are free; a flood can pause uploads for the day but can't fill storage. Privacy policy now names our media server. |
 | 10 Oct | Media server pilot deployed at media.freegram.in. Signed JPEG uploads, 1 MiB photos, 1600 px dimensions, 100 new hashes per key and 1 GiB reserved cap. URLs are included before post signing; carriers never edit signed posts. Android attempts eight hashes per pass with persistent rotation and receipts. Downloads trigger UI refresh. Production retention/deletion and physical-phone end-to-end checks remain open. |
 
 ## Next up
 
-1. **You:** deploy the media server (`npx wrangler deploy --config freegram-media/wrangler.jsonc`) and the website (`cd freegram-site && npx wrangler deploy`).
-2. **Me:** video screens (pick, post, progress, play), then release 0.7.0 and put it on freegram.in.
-3. **You:** test 0.6.x on your phones: reach settings, carried Discover posts, longer Nearby, fast photos, online photos.
+1. **You:** deploy the media server so videos can upload (`npx wrangler deploy --config freegram-media/wrangler.jsonc`).
+2. **You:** test 0.7.0 on your phones: post a video, get it on the other phone nearby and online, play it.
+3. **Me:** put 0.7.0 on freegram.in once you're happy; then the Reels tab (0.8.0).
 4. **You:** screenshots; finish the Play forms; upload the latest version to closed testing; invite 15 to 20 testers.
 5. **You:** back up the release key; answer the open decisions in [PRINCIPLES.md](PRINCIPLES.md); find a lawyer.
 
