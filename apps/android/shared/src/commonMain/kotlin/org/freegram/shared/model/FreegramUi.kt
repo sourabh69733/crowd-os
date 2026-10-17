@@ -183,6 +183,11 @@ interface FreegramUi : SettingsUi {
     fun removeVideo()
     /** Starts getting a post's video, even on mobile data. */
     fun downloadVideo(postId: String)
+
+    /** Top-level video posts for the Reels tab: videos already on this phone first, then newest. */
+    val reels: List<PostUi>
+    /** Quietly queues these reels' videos for download (the one on screen and the next ones). */
+    fun prefetchReels(postIds: List<String>)
     fun publish()
     fun open(postId: String)
     fun closeDetail()
@@ -222,8 +227,8 @@ interface FreegramUi : SettingsUi {
 class PlatformActions(
     val pickPhoto: () -> Unit,
     val pickVideo: () -> Unit,
-    /** Plays a local video file with standard controls. */
-    val videoPlayer: @Composable (path: String) -> Unit,
+    /** Plays a local video file: with controls, or (for Reels) autoplaying and looping, tap to pause. */
+    val videoPlayer: @Composable (path: String, autoplay: Boolean) -> Unit,
     val startNearby: () -> Unit,
     val openWifiSettings: () -> Unit,
     val copyText: (label: String, text: String) -> Unit,

@@ -142,7 +142,7 @@ fun PostDetailScreen(ui: FreegramUi, post: PostUi, platform: PlatformActions) {
         PostCard(post, onClick = null, onMore = { sheet = "menu" }, onLike = { ui.like(post.id, !post.likedByMe) })
         when (val video = post.video) {
             is VideoUi.Ready -> {
-                Box(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp).clip(RoundedCornerShape(12.dp))) { platform.videoPlayer(video.path) }
+                Box(Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp).clip(RoundedCornerShape(12.dp))) { platform.videoPlayer(video.path, false) }
                 Hint("Video checked: every piece matches its fingerprint. Saved on this phone; it passes to nearby phones and uploads when online.")
             }
             is VideoUi.Receiving, is VideoUi.Waiting ->

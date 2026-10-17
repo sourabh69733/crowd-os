@@ -32,7 +32,7 @@ import org.freegram.shared.model.PlatformActions
 import org.freegram.shared.model.SettingsPage
 
 enum class Tab(val label: String, val icon: ImageVector) {
-    Home("Home", FgIcons.Home), Discover("Discover", FgIcons.Discover), Nearby("Nearby", FgIcons.Nearby), Compose("Post", FgIcons.Plus),
+    Home("Home", FgIcons.Home), Discover("Discover", FgIcons.Discover), Reels("Reels", FgIcons.Play), Nearby("Nearby", FgIcons.Nearby), Compose("Post", FgIcons.Plus),
     Profile("Profile", FgIcons.Profile), Settings("Settings", FgIcons.Settings)
 }
 
@@ -65,7 +65,7 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
             bottomBar = {
                 if (ui.selected == null) NavigationBar(containerColor = c.surface) {
                     // Settings opens from the gear on Profile, so it highlights Profile here.
-                    listOf(Tab.Home, Tab.Discover, Tab.Nearby, Tab.Profile).forEach { t ->
+                    listOf(Tab.Home, Tab.Discover, Tab.Reels, Tab.Nearby, Tab.Profile).forEach { t ->
                         NavigationBarItem(
                             selected = tab == t || (t == Tab.Profile && tab == Tab.Settings), onClick = { tab = t },
                             icon = { Icon(t.icon, contentDescription = null) }, label = { Text(t.label) },
@@ -82,6 +82,7 @@ fun FreegramApp(ui: FreegramUi, platform: PlatformActions, settingsPages: List<S
                     selected != null -> PostDetailScreen(ui, selected, platform)
                     tab == Tab.Home -> HomeScreen(ui)
                     tab == Tab.Discover -> DiscoverScreen(ui)
+                    tab == Tab.Reels -> ReelsScreen(ui, platform)
                     tab == Tab.Nearby -> NearbyScreen(ui, platform)
                     tab == Tab.Compose -> ComposeScreen(ui, platform, onDone = { tab = Tab.Home })
                     tab == Tab.Profile -> ProfileScreen(ui, platform, onSettings = { tab = Tab.Settings })

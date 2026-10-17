@@ -18,6 +18,7 @@ import androidx.activity.viewModels
 import androidx.compose.foundation.Image
 import androidx.compose.foundation.layout.Arrangement
 import androidx.compose.foundation.layout.Column
+import androidx.compose.foundation.layout.fillMaxSize
 import androidx.compose.foundation.layout.fillMaxWidth
 import androidx.compose.foundation.layout.heightIn
 import androidx.compose.material3.Button
@@ -68,7 +69,7 @@ private fun FreegramHost(model: FreegramViewModel) {
         PlatformActions(
             pickPhoto = { photoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.ImageOnly)) },
             pickVideo = { videoPicker.launch(PickVisualMediaRequest(ActivityResultContracts.PickVisualMedia.VideoOnly)) },
-            videoPlayer = { path -> VideoPlayer(path) },
+            videoPlayer = { path, autoplay -> VideoPlayer(path, autoplay) },
             startNearby = { permissions.launch(nearbyPermissions() + optionalNearbyPermissions()) },
             openWifiSettings = { context.startActivity(wifiSettingsIntent()) },
             copyText = { label, text ->
@@ -186,22 +187,30 @@ private fun DeveloperPage(model: FreegramViewModel) {
     }
 }
 
-/** Android's built-in player with standard controls, so the app needs no extra player library. Doesn't autoplay. */
+/**
+ * Android's built-in player, so the app needs no extra player library.
+ * Post page: standard controls, no autoplay. Reels ([autoplay]): fills the screen, starts and loops, tap to pause.
+ */
 @Composable
-private fun VideoPlayer(path: String) {
+private fun VideoPlayer(path: String, autoplay: Boolean) {
     androidx.compose.ui.viewinterop.AndroidView(
         factory = { context ->
             android.widget.VideoView(context).apply {
-                val controls = android.widget.MediaController(context)
-                controls.setAnchorView(this)
-                setMediaController(controls)
-                setOnPreparedListener { player -> player.isLooping = false; seekTo(1); controls.show(0) }
+                if (autoplay) {
+                    setOnPreparedListener { player -> player.isLooping = true; start() }
+                    setOnClickListener { if (isPlaying) pause() else start() }
+                } else {
+                    val controls = android.widget.MediaController(context)
+                    controls.setAnchorView(this)
+                    setMediaController(controls)
+                    setOnPreparedListener { player -> player.isLooping = false; seekTo(1); controls.show(0) }
+                }
                 tag = path
                 setVideoPath(path)
             }
         },
         update = { view -> if (view.tag != path) { view.tag = path; view.setVideoPath(path) } },
         onRelease = { it.stopPlayback() },
-        modifier = Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp),
+        modifier = if (autoplay) Modifier.fillMaxSize() else Modifier.fillMaxWidth().heightIn(min = 200.dp, max = 480.dp),
     )
 }

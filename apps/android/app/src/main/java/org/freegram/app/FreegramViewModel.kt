@@ -295,6 +295,27 @@ class FreegramViewModel(application: Application) : AndroidViewModel(application
 
     override fun removeVideo() { pickedVideo = null; draftVideo = null }
 
+    override val reels: List<PostUi> get() {
+        val all = (posts + discoverPosts).filter { it.replyTo == null && it.video != org.freegram.shared.model.VideoUi.None }.distinctBy { it.id }
+        // Videos already on this phone play instantly and work offline, so they come first; both groups stay newest first.
+        return all.filter { it.video is org.freegram.shared.model.VideoUi.Ready } + all.filterNot { it.video is org.freegram.shared.model.VideoUi.Ready }
+    }
+
+    /** Opening Reels means the user wants to watch, so the reel on screen and the next two are queued, without a toast. */
+    override fun prefetchReels(postIds: List<String>) {
+        viewModelScope.launch {
+            var queued = false
+            for (id in postIds) {
+                val ref = findEvent(id)?.let(org.freegram.app.protocol.VideoRef::of) ?: continue
+                val manifest = io { videos.manifest(ref.manifestId) }
+                if (manifest != null && io { videos.readyFile(manifest) } != null) continue
+                io { videos.request(ref.sha256) }
+                queued = true
+            }
+            if (queued && online) RelayRetryWorker.schedulePhotos(getApplication())
+        }
+    }
+
     override fun downloadVideo(postId: String) {
         viewModelScope.launch {
             val ref = findEvent(postId)?.let(org.freegram.app.protocol.VideoRef::of) ?: return@launch
